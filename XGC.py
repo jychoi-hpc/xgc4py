@@ -222,15 +222,15 @@ class XGC:
 
 
         
-        result = subprocess.run(['/usr/bin/grep', '-a', 'SML_OUTPSI=', 'fort.input.used'], stdout=subprocess.PIPE)
+        result = subprocess.run(['/usr/bin/grep', '-a', 'SML_OUTPSI', 'fort.input.used'], stdout=subprocess.PIPE)
         self.sml_00_npsi = self.grid.npsi
         self.sml_inpsi = 0.0000000000000000
-        kv = result.stdout.decode().replace(' ','').replace(',','').split('=')
+        kv = result.stdout.decode().replace(' ','').replace(',','').split('\n')[0].split('=')
         self.sml_outpsi = float(kv[1])
         print ('sml_00_npsi, sml_inpsi, sml_outpsi=', self.sml_00_npsi, self.sml_inpsi, self.sml_outpsi)
 
-        result = subprocess.run(['/usr/bin/grep', '-a', 'SML_NPHI_TOTAL=', 'fort.input.used'], stdout=subprocess.PIPE)
-        kv = result.stdout.decode().replace(' ','').replace(',','').split('=')
+        result = subprocess.run(['/usr/bin/grep', '-a', 'SML_NPHI_TOTAL', 'fort.input.used'], stdout=subprocess.PIPE)
+        kv = result.stdout.decode().replace(' ','').replace(',','').split('\n')[0].split('=')
         self.nphi = int(kv[1])
         print ('sml_nphi_total=', self.nphi)
         
