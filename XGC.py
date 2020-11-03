@@ -23,17 +23,18 @@ class XGC:
             self.z = self.rz[:,1]
 
     class F0mesh:
-        def __init__(self, expdir=''):
+        def __init__(self, expdir='', device=None):
+            self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
             fname = os.path.join(expdir, 'xgc.f0.mesh.bp')
             print (f"Reading: {fname}")
             with ad2.open(fname, 'r') as f:
-                self.f0_nmu = f.read('f0_nmu')
-                self.f0_nvp = f.read('f0_nvp')
-                self.f0_smu_max = f.read('f0_smu_max')
-                self.f0_dsmu = f.read('f0_dsmu')
-                self.f0_dvp = f.read('f0_dvp')
-                self.f0_T_ev = f.read('f0_T_ev')
-                self.f0_grid_vol_vonly = f.read('f0_grid_vol_vonly')
+                self.f0_nmu = torch.from_numpy(f.read('f0_nmu')).to(self.device)
+                self.f0_nvp = torch.from_numpy(f.read('f0_nvp')).to(self.device)
+                self.f0_smu_max = torch.from_numpy(f.read('f0_smu_max')).to(self.device)
+                self.f0_dsmu = torch.from_numpy(f.read('f0_dsmu')).to(self.device)
+                self.f0_dvp = torch.from_numpy(f.read('f0_dvp')).to(self.device)
+                self.f0_T_ev = torch.from_numpy(f.read('f0_T_ev')).to(self.device)
+                self.f0_grid_vol_vonly = torch.from_numpy(f.read('f0_grid_vol_vonly')).to(self.device)
 
     class Grid:
         class Mat:
@@ -192,7 +193,7 @@ class XGC:
         self.mesh = self.Mesh(expdir)
 
         ## populate f0mesh
-        self.f0mesh = self.F0mesh(expdir)
+        self.f0mesh = self.F0mesh(expdir, device=self.device)
         
         ## populate grid
         self.grid = self.Grid(expdir, device=self.device)
@@ -242,7 +243,7 @@ class XGC:
         self.grid.psi00max = self.sml_outpsi * self.eq_x_psi
         self.grid.dpsi00 = (self.grid.psi00max - self.grid.psi00min)/float(self.grid.npsi00-1)
 
-    def f0_diag(self, f0_inode1, ndata, isp, f0_f, device=None, progress=False):
+    def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
         f0_inode1: int
@@ -271,6 +272,9 @@ class XGC:
         All outputs are before performing flux-surface averaging
         """
 
+        ## (2020/11) f0_f should be tensor
+        device = f0_f.device
+
         ## Aliases
         f0_nmu = self.f0mesh.f0_nmu
         f0_nvp = self.f0mesh.f0_nvp
@@ -298,47 +302,44 @@ class XGC:
         ptl_mass = [ptl_e_mass_au*sml_prot_mass, ptl_mass_au*sml_prot_mass]
 
         ## index: imu, range: [0, f0_nmu]
-        mu_vol = np.ones(f0_nmu+1)
+        mu_vol = torch.ones(f0_nmu+1)
         mu_vol[0] = 0.5
         mu_vol[-1] = 0.5
 
         ## index: ivp, range: [-f0_nvp, f0_nvp]
-        vp_vol = np.ones(f0_nvp*2+1)
+        vp_vol = torch.ones(f0_nvp*2+1)
         vp_vol[0] = 0.5
         vp_vol[-1] = 0.5
 
         #f0_smu_max = 3.0
         #f0_dsmu = f0_smu_max/f0_nmu
-        mu = (np.arange(f0_nmu+1, dtype=np.float64)*f0_dsmu)**2
+        mu = (torch.arange(f0_nmu+1, dtype=torch.float64)*f0_dsmu)**2
 
         # out
-        den = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
-        u_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
-        T_perp = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
-        T_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
+        den = torch.zeros((ndata, f0_nmu+1, 2*f0_nvp+1)).to(device)
+        u_para = torch.zeros((ndata, f0_nmu+1, 2*f0_nvp+1)).to(device)
+        T_perp = torch.zeros((ndata, f0_nmu+1, 2*f0_nvp+1)).to(device)
+        T_para = torch.zeros((ndata, f0_nmu+1, 2*f0_nvp+1)).to(device)
 
-        if device is None:
-            device = torch.device('cpu')
+        # ## (2020/11) everything with torch.Tensor
+        # if device is not None:
+        #     f0_nmu = torch.from_numpy(f0_nmu).to(device)
+        #     f0_nvp = torch.from_numpy(f0_nvp).to(device)
+        #     f0_smu_max = torch.from_numpy(f0_smu_max).to(device)
+        #     f0_dsmu = torch.from_numpy(f0_dsmu).to(device)
+        #     f0_T_ev = torch.from_numpy(f0_T_ev).to(device)
+        #     f0_grid_vol_vonly = torch.from_numpy(f0_grid_vol_vonly).to(device)
+        #     f0_dvp = torch.from_numpy(f0_dvp).to(device)
+        #     nnodes = torch.Tensor(nnodes).to(device)
 
-        ## (2020/11) everything with torch.Tensor
-        if device is not None:
-            f0_nmu = torch.from_numpy(f0_nmu).to(device)
-            f0_nvp = torch.from_numpy(f0_nvp).to(device)
-            f0_smu_max = torch.from_numpy(f0_smu_max).to(device)
-            f0_dsmu = torch.from_numpy(f0_dsmu).to(device)
-            f0_T_ev = torch.from_numpy(f0_T_ev).to(device)
-            f0_grid_vol_vonly = torch.from_numpy(f0_grid_vol_vonly).to(device)
-            f0_dvp = torch.from_numpy(f0_dvp).to(device)
-            nnodes = torch.Tensor(nnodes).to(device)
+        #     mu_vol = torch.from_numpy(mu_vol).to(device)
+        #     vp_vol = torch.from_numpy(vp_vol).to(device)
+        #     mu = torch.from_numpy(mu).to(device)
 
-            mu_vol = torch.from_numpy(mu_vol).to(device)
-            vp_vol = torch.from_numpy(vp_vol).to(device)
-            mu = torch.from_numpy(mu).to(device)
-
-            den = torch.from_numpy(den).to(device)
-            u_para = torch.from_numpy(u_para).to(device)
-            T_perp = torch.from_numpy(T_perp).to(device)
-            T_para = torch.from_numpy(T_para).to(device)
+        #     den = torch.from_numpy(den).to(device)
+        #     u_para = torch.from_numpy(u_para).to(device)
+        #     T_perp = torch.from_numpy(T_perp).to(device)
+        #     T_para = torch.from_numpy(T_para).to(device)
 
         # 1) Density, parallel flow, and T_perp moments
         for inode in tqdm(range(0, ndata), disable=not progress):
@@ -465,9 +466,9 @@ if __name__ == "__main__":
     fT0_all = torch.zeros([nphi,ndata]).to(device)
     for iphi in range(nphi):
         f0_f = np.moveaxis(i_f[iphi,:],1,0)
-        f0_f = f0_f[f0_inode1:f0_inode1+ndata,:,:]
+        f0_f = torch.from_numpy(f0_f[f0_inode1:f0_inode1+ndata,:,:]).to(device)
         den, upara, Tperp, Tpara, fn0, fT0 = \
-            xgcexp.f0_diag(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, device=device, progress=True)
+            xgcexp.f0_diag(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, progress=True)
         fn0_all[iphi,:] = fn0
         fT0_all[iphi,:] = fT0
     print (den.shape, upara.shape, Tperp.shape, Tpara.shape, fn0.shape, fT0.shape)
