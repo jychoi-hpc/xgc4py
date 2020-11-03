@@ -49,36 +49,37 @@ class XGC:
 
             def mat_transpose_mult(self, x):
                 assert self.n == len(x)
-                y = np.zeros([self.m,])
+                y = torch.zeros([self.m,]).to(self.device)
                 for i in range(self.n):
                     for j in range(self.nelement[i]):
                         k = self.eindex[i,j]-1
                         y[k] = y[k] + self.value[i,j] * x[i]
                 return y
 
-        def __init__(self, expdir=''):
+        def __init__(self, expdir='', device=None):
+            self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.cnv_2d_00 = self.Mat()
             
             fname = os.path.join(expdir, 'xgc.fluxavg.bp')
             print (f"Reading: {fname}")
             with ad2.open(fname, 'r') as f:
-                self.cnv_2d_00.n = f.read('nnode')
-                self.cnv_2d_00.m = f.read('npsi')
-                self.cnv_2d_00.width = f.read('width')
-                self.cnv_2d_00.value = f.read('value')
-                self.cnv_2d_00.eindex = f.read('eindex')
-                self.cnv_2d_00.nelement = f.read('nelement')
-                self.cnv_norm_1d00 = f.read('norm1d')
-                self.cnv_norm_2d = f.read('norm2d')
-                self.npsi = f.read('npsi').item()
+                self.cnv_2d_00.n = torch.from_numpy(f.read('nnode')).to(self.device)
+                self.cnv_2d_00.m = torch.from_numpy(f.read('npsi')).to(self.device)
+                self.cnv_2d_00.width = torch.from_numpy(f.read('width')).to(self.device)
+                self.cnv_2d_00.value = torch.from_numpy(f.read('value')).to(self.device)
+                self.cnv_2d_00.eindex = torch.from_numpy(f.read('eindex')).to(self.device)
+                self.cnv_2d_00.nelement = torch.from_numpy(f.read('nelement')).to(self.device)
+                self.cnv_norm_1d00 = torch.from_numpy(f.read('norm1d')).to(self.device)
+                self.cnv_norm_2d = torch.from_numpy(f.read('norm2d')).to(self.device)
+                self.npsi = torch.from_numpy(f.read('npsi')).to(self.device)
     
             fname = os.path.join(expdir, 'xgc.mesh.bp')
             print (f"Reading: {fname}")
             with ad2.open(fname, 'r') as f:
-                self.psi = f.read('psi')
-                self.nnodes = f.read('n_n')
-                self.x = f.read('rz')
-
+                self.psi = torch.from_numpy(f.read('psi')).to(self.device)
+                self.nnodes = torch.from_numpy(f.read('n_n')).to(self.device)
+                self.rz = torch.from_numpy(f.read('rz')).to(self.device)
+            
     """
       ! check if region 1 or 2
       logical function is_rgn12(r,z,psi)
@@ -166,11 +167,11 @@ class XGC:
     end subroutine convert_001d_2_grid
     """
     def convert_001d_2_grid(self, v1d):
-        v2d = np.zeros(self.grid.nnodes)
+        v2d = torch.zeros(self.grid.nnodes).to(self.device)
         for i in range(self.grid.nnodes):
             pn=(self.grid.psi[i]-self.grid.psi00min)/self.grid.dpsi00
             ip=int(np.floor(pn))+1
-            if(0 < ip and ip < self.grid.npsi00 and self.is_rgn12(self.grid.x[i,0],self.grid.x[i,1],self.grid.psi[i])):
+            if(0 < ip and ip < self.grid.npsi00 and self.is_rgn12(self.grid.rz[i,0],self.grid.rz[i,1],self.grid.psi[i])):
                 wp=1.0 - ( pn - float(ip-1) )
             elif (ip<=0):
                 ip=1
@@ -183,7 +184,8 @@ class XGC:
 
         return v2d
 
-    def __init__(self, expdir=''):
+    def __init__(self, expdir='', device=None):
+        self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.expdir = expdir
         
         ## populate mesh
@@ -193,31 +195,31 @@ class XGC:
         self.f0mesh = self.F0mesh(expdir)
         
         ## populate grid
-        self.grid = self.Grid(expdir)
+        self.grid = self.Grid(expdir, device=self.device)
 
         ## XGC has been updated to output more values: eq_x_slope, eq_x2_psi, eq_x2_r, eq_x2_z, eq_x2_slope
         fname = os.path.join(expdir, 'xgc.equil.bp')
         print (f"Reading: {fname}")
         with ad2.open(fname, 'r') as f:
-            self.eq_axis_b = f.read('eq_axis_b')
-            self.eq_axis_r = f.read('eq_axis_r')
-            self.eq_axis_z = f.read('eq_axis_z')
+            self.eq_axis_b = torch.from_numpy(f.read('eq_axis_b')).to(self.device)
+            self.eq_axis_r = torch.from_numpy(f.read('eq_axis_r')).to(self.device)
+            self.eq_axis_z = torch.from_numpy(f.read('eq_axis_z')).to(self.device)
 
-            self.eq_max_r = f.read('eq_max_r')
-            self.eq_max_z = f.read('eq_max_z')
-            self.eq_min_r = f.read('eq_min_r')
-            self.eq_min_z = f.read('eq_min_z')
+            self.eq_max_r = torch.from_numpy(f.read('eq_max_r')).to(self.device)
+            self.eq_max_z = torch.from_numpy(f.read('eq_max_z')).to(self.device)
+            self.eq_min_r = torch.from_numpy(f.read('eq_min_r')).to(self.device)
+            self.eq_min_z = torch.from_numpy(f.read('eq_min_z')).to(self.device)
 
-            self.eq_x_psi = f.read('eq_x_psi')
-            self.eq_x_r = f.read('eq_x_r')
-            self.eq_x_z = f.read('eq_x_z')
-            self.eq_x_slope = f.read('eq_x_slope')
+            self.eq_x_psi = torch.from_numpy(f.read('eq_x_psi')).to(self.device)
+            self.eq_x_r = torch.from_numpy(f.read('eq_x_r')).to(self.device)
+            self.eq_x_z = torch.from_numpy(f.read('eq_x_z')).to(self.device)
+            self.eq_x_slope = torch.from_numpy(f.read('eq_x_slope')).to(self.device)
 
 
-            self.eq_x2_psi = f.read('eq_x2_psi')
-            self.eq_x2_r = f.read('eq_x2_r')
-            self.eq_x2_z = f.read('eq_x2_z')
-            self.eq_x2_slope = f.read('eq_x2_slope')
+            self.eq_x2_psi = torch.from_numpy(f.read('eq_x2_psi')).to(self.device)
+            self.eq_x2_r = torch.from_numpy(f.read('eq_x2_r')).to(self.device)
+            self.eq_x2_z = torch.from_numpy(f.read('eq_x2_z')).to(self.device)
+            self.eq_x2_slope = torch.from_numpy(f.read('eq_x2_slope')).to(self.device)
 
         self.epsil_psi =  1E-5
 
@@ -413,11 +415,11 @@ class XGC:
         assert T0_all.shape == (self.nphi, ndata)
 
         ## First, we calcuate average over planes
-        n0 = np.sum(n0_all, axis=0)/self.nphi
-        T0 = np.sum(T0_all, axis=0)/self.nphi
+        n0 = torch.sum(n0_all, axis=0)/self.nphi
+        T0 = torch.sum(T0_all, axis=0)/self.nphi
 
         ## n0
-        n0_avg = np.zeros([self.grid.nnodes,])
+        n0_avg = torch.zeros([self.grid.nnodes,])
         n0_avg[:] = np.nan
         n0_avg[f0_inode1:f0_inode1+ndata] = n0
 
@@ -427,7 +429,7 @@ class XGC:
         #n0_avg[np.logical_or(np.isinf(n0_avg), np.isnan(n0_avg), n0_avg < 0.0)] = 1E17
 
         ## T0
-        T0_avg = np.zeros([self.grid.nnodes,])
+        T0_avg = torch.zeros([self.grid.nnodes,])
         T0_avg[:] = np.nan
         T0_avg[f0_inode1:f0_inode1+ndata] = T0
 
