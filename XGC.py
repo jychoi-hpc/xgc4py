@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 import adios2 as ad2
 from tqdm import tqdm
@@ -239,7 +240,7 @@ class XGC:
         self.grid.psi00max = self.sml_outpsi * self.eq_x_psi
         self.grid.dpsi00 = (self.grid.psi00max - self.grid.psi00min)/float(self.grid.npsi00-1)
 
-    def f0_diag(self, f0_inode1, ndata, isp, f0_f):
+    def f0_diag(self, f0_inode1, ndata, isp, f0_f, device=None, progress=False):
         """ 
         Input:
         f0_inode1: int
@@ -314,11 +315,34 @@ class XGC:
         T_perp = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
         T_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
 
+        if device is None:
+            device = torch.device('cpu')
+
+        ## (2020/11) everything with torch.Tensor
+        if device is not None:
+            f0_nmu = torch.from_numpy(f0_nmu).to(device)
+            f0_nvp = torch.from_numpy(f0_nvp).to(device)
+            f0_smu_max = torch.from_numpy(f0_smu_max).to(device)
+            f0_dsmu = torch.from_numpy(f0_dsmu).to(device)
+            f0_T_ev = torch.from_numpy(f0_T_ev).to(device)
+            f0_grid_vol_vonly = torch.from_numpy(f0_grid_vol_vonly).to(device)
+            f0_dvp = torch.from_numpy(f0_dvp).to(device)
+            nnodes = torch.Tensor(nnodes).to(device)
+
+            mu_vol = torch.from_numpy(mu_vol).to(device)
+            vp_vol = torch.from_numpy(vp_vol).to(device)
+            mu = torch.from_numpy(mu).to(device)
+
+            den = torch.from_numpy(den).to(device)
+            u_para = torch.from_numpy(u_para).to(device)
+            T_perp = torch.from_numpy(T_perp).to(device)
+            T_para = torch.from_numpy(T_para).to(device)
+
         # 1) Density, parallel flow, and T_perp moments
-        for inode in tqdm(range(0, ndata)):
+        for inode in tqdm(range(0, ndata), disable=not progress):
             ## Mesh properties
             en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
-            vth = np.sqrt(en_th/ptl_mass[isp])
+            vth = torch.sqrt(en_th/ptl_mass[isp])
             f0_grid_vol = f0_grid_vol_vonly[isp,f0_inode1+inode]
 
             for imu in range(0, f0_nmu+1):
@@ -335,16 +359,16 @@ class XGC:
                     #if (inode==0): print ('imu,inode,ivp,ptl_mass,vth,en,vol=',imu,inode,ivp,ptl_mass[isp],vth,en,vol)
 
         for inode in range(0, ndata):
-            u_para[inode,:] = u_para[inode,:]/np.sum(den[inode,:])
-            T_perp[inode,:] = T_perp[inode,:]/np.sum(den[inode,:])/sml_e_charge
+            u_para[inode,:] = u_para[inode,:]/torch.sum(den[inode,:])
+            T_perp[inode,:] = T_perp[inode,:]/torch.sum(den[inode,:])/sml_e_charge
 
-        upar = np.sum(u_para, axis=(1,2))
+        upar = torch.sum(u_para, axis=(1,2))
 
         # 2) T_para moment
-        for inode in tqdm(range(0, ndata)):
+        for inode in tqdm(range(0, ndata), disable=not progress):
             ## Mesh properties
             en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
-            vth = np.sqrt(en_th/ptl_mass[isp])
+            vth = torch.sqrt(en_th/ptl_mass[isp])
             f0_grid_vol = f0_grid_vol_vonly[isp,f0_inode1+inode]
 
             for imu in range(0, f0_nmu+1):
@@ -358,10 +382,10 @@ class XGC:
                     T_para[inode, imu, ivp] = f * vol * en * vth**2 * ptl_mass[isp]
 
         for inode in range(0, ndata):
-            T_para[inode,:] = 2.0*T_para[inode,:]/np.sum(den[inode,:])/sml_e_charge
+            T_para[inode,:] = 2.0*T_para[inode,:]/torch.sum(den[inode,:])/sml_e_charge
 
-        n0 = np.sum(den, axis=(1,2))
-        T0 = (2.0*np.sum(T_perp, axis=(1,2))+np.sum(T_para, axis=(1,2)))/3.0
+        n0 = torch.sum(den, axis=(1,2))
+        T0 = (2.0*torch.sum(T_perp, axis=(1,2))+torch.sum(T_para, axis=(1,2)))/3.0
 
         # 3) Get the flux-surface average of n and T
         #    And the toroidal averages of n, T, and u_par
