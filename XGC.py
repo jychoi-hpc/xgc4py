@@ -456,13 +456,15 @@ if __name__ == "__main__":
     iphi = 0
     f0_inode1 = 0
     ndata = i_f.shape[2] if args.ndata is None else args.ndata
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     fn0_all = np.zeros([nphi,ndata])
     fT0_all = np.zeros([nphi,ndata])
     for iphi in range(nphi):
         f0_f = np.moveaxis(i_f[iphi,:],1,0)
+        f0_f = f0_f[f0_inode1:f0_inode1+ndata,:,:]
         den, upara, Tperp, Tpara, fn0, fT0 = \
-            xgcexp.f0_diag(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f[f0_inode1:f0_inode1+ndata,:,:], progress=True)
+            xgcexp.f0_diag(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, device=device, progress=True)
         fn0_all[iphi,:] = fn0
         fT0_all[iphi,:] = fT0
     print (den.shape, upara.shape, Tperp.shape, Tpara.shape, fn0.shape, fT0.shape)
