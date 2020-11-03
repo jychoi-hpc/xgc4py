@@ -49,7 +49,7 @@ class XGC:
 
             def mat_transpose_mult(self, x):
                 assert self.n == len(x)
-                y = torch.zeros([self.m,]).to(self.device)
+                y = torch.zeros([self.m,]).to(x.device)
                 for i in range(self.n):
                     for j in range(self.nelement[i]):
                         k = self.eindex[i,j]-1
@@ -167,10 +167,10 @@ class XGC:
     end subroutine convert_001d_2_grid
     """
     def convert_001d_2_grid(self, v1d):
-        v2d = torch.zeros(self.grid.nnodes).to(self.device)
+        v2d = torch.zeros(self.grid.nnodes).to(v1d.device)
         for i in range(self.grid.nnodes):
             pn=(self.grid.psi[i]-self.grid.psi00min)/self.grid.dpsi00
-            ip=int(np.floor(pn))+1
+            ip=int(torch.floor(pn))+1
             if(0 < ip and ip < self.grid.npsi00 and self.is_rgn12(self.grid.rz[i,0],self.grid.rz[i,1],self.grid.psi[i])):
                 wp=1.0 - ( pn - float(ip-1) )
             elif (ip<=0):
@@ -419,7 +419,7 @@ class XGC:
         T0 = torch.sum(T0_all, axis=0)/self.nphi
 
         ## n0
-        n0_avg = torch.zeros([self.grid.nnodes,])
+        n0_avg = torch.zeros([self.grid.nnodes,]).to(n0_all.device)
         n0_avg[:] = np.nan
         n0_avg[f0_inode1:f0_inode1+ndata] = n0
 
@@ -429,7 +429,7 @@ class XGC:
         #n0_avg[np.logical_or(np.isinf(n0_avg), np.isnan(n0_avg), n0_avg < 0.0)] = 1E17
 
         ## T0
-        T0_avg = torch.zeros([self.grid.nnodes,])
+        T0_avg = torch.zeros([self.grid.nnodes,]).to(T0_all.device)
         T0_avg[:] = np.nan
         T0_avg[f0_inode1:f0_inode1+ndata] = T0
 
@@ -461,8 +461,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print ("device:", device)
 
-    fn0_all = torch.zeros([nphi,ndata])
-    fT0_all = torch.zeros([nphi,ndata])
+    fn0_all = torch.zeros([nphi,ndata]).to(device)
+    fT0_all = torch.zeros([nphi,ndata]).to(device)
     for iphi in range(nphi):
         f0_f = np.moveaxis(i_f[iphi,:],1,0)
         f0_f = f0_f[f0_inode1:f0_inode1+ndata,:,:]
