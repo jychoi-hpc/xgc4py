@@ -437,3 +437,36 @@ class XGC:
         #T0_avg[np.logical_or(np.isinf(T0_avg), np.isnan(T0_avg), T0_avg < 0.0)] = 10E0
 
         return (n0_avg, T0_avg)
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--expdir', help='exp directory (default: %(default)s)', default='')
+    parser.add_argument('--timestep', help='timestep', type=int, default=0)
+    parser.add_argument('--ndata', help='ndata', type=int)
+    args = parser.parse_args()
+    
+    xgcexp = XGC(args.expdir)
+
+    fname = os.path.join(args.expdir, 'restart_dir/xgc.f0.%05d.bp'%args.timestep)
+    with ad2.open(fname, 'r') as f:
+        i_f = f.read('i_f')
+    
+    nphi = i_f.shape[0]
+    iphi = 0
+    f0_inode1 = 0
+    ndata = i_f.shape[2] if args.ndata is None else args.ndata
+
+    fn0_all = np.zeros([nphi,ndata])
+    fT0_all = np.zeros([nphi,ndata])
+    for iphi in range(nphi):
+        f0_f = np.moveaxis(i_f[iphi,:],1,0)
+        den, upara, Tperp, Tpara, fn0, fT0 = \
+            xgcexp.f0_diag(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f[f0_inode1:f0_inode1+ndata,:,:], progress=True)
+        fn0_all[iphi,:] = fn0
+        fT0_all[iphi,:] = fT0
+    print (den.shape, upara.shape, Tperp.shape, Tpara.shape, fn0.shape, fT0.shape)
+    
+    fn0_avg, fT0_avg = xgcexp.f0_avg_diag(f0_inode1, ndata, fn0_all, fT0_all)
+    print (fn0_avg.shape, fT0_avg.shape)
+
