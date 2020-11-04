@@ -239,7 +239,7 @@ class XGC:
         self.grid.psi00max = self.sml_outpsi * self.eq_x_psi
         self.grid.dpsi00 = (self.grid.psi00max - self.grid.psi00min)/float(self.grid.npsi00-1)
 
-    def f0_diag(self, f0_inode1, ndata, isp, f0_f):
+    def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
         f0_inode1: int
@@ -315,7 +315,7 @@ class XGC:
         T_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
 
         # 1) Density, parallel flow, and T_perp moments
-        for inode in tqdm(range(0, ndata)):
+        for inode in tqdm(range(0, ndata), disable=not progress):
             ## Mesh properties
             en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
             vth = np.sqrt(en_th/ptl_mass[isp])
@@ -341,7 +341,7 @@ class XGC:
         upar = np.sum(u_para, axis=(1,2))
 
         # 2) T_para moment
-        for inode in tqdm(range(0, ndata)):
+        for inode in tqdm(range(0, ndata), disable=not progress):
             ## Mesh properties
             en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
             vth = np.sqrt(en_th/ptl_mass[isp])
