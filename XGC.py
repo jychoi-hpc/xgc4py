@@ -239,6 +239,23 @@ class XGC:
         self.grid.psi00max = self.sml_outpsi * self.eq_x_psi
         self.grid.dpsi00 = (self.grid.psi00max - self.grid.psi00min)/float(self.grid.npsi00-1)
 
+    def f0_diag_future(self, f0_inode1, ndata, isp, f0_f, progress=False, nchunk=16, max_workers=16):
+        from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = list()
+            for i in range(f0_inode1, f0_inode1+ndata, nchunk):
+                n = nchunk if i+nchunk < f0_inode1+ndata else f0_inode1+ndata-i
+                f = executor.submit(self.f0_diag, i, n, isp, f0_f[i:i+n])
+                futures.append(f)
+            
+            alist = list()
+            for f in tqdm(futures, disable=not progress):
+                alist.append(f.result())
+
+            y = list(map(lambda a: np.concatenate(a), zip(*alist)))
+            return y
+
     def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
@@ -442,7 +459,7 @@ if __name__ == "__main__":
         f0_f = np.moveaxis(i_f[iphi,:],1,0)
         f0_f = f0_f[f0_inode1:f0_inode1+ndata,:,:]
         den, upara, Tperp, Tpara, fn0, fT0 = \
-            xgcexp.f0_diag(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f)
+            xgcexp.f0_diag_future(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, progress=True)
         fn0_all[iphi,:] = fn0
         fT0_all[iphi,:] = fT0
     print (den.shape, upara.shape, Tperp.shape, Tpara.shape, fn0.shape, fT0.shape)
