@@ -416,8 +416,7 @@ class XGC:
 
         tmp00_surf = self.convert_grid_2_001d(n0_avg)
         n0_avg = self.convert_001d_2_grid(tmp00_surf)
-        # jyc: we disable for debug
-        #n0_avg[np.logical_or(np.isinf(n0_avg), np.isnan(n0_avg), n0_avg < 0.0)] = 1E17
+        n0_avg[np.logical_or(np.isinf(n0_avg), np.isnan(n0_avg), n0_avg < 0.0)] = 1E17
 
         ## T0
         T0_avg = np.zeros([self.grid.nnodes,])
@@ -426,8 +425,7 @@ class XGC:
 
         tmp00_surf = self.convert_grid_2_001d(T0_avg)
         T0_avg = self.convert_001d_2_grid(tmp00_surf)
-        # jyc: we disable for debug
-        #T0_avg[np.logical_or(np.isinf(T0_avg), np.isnan(T0_avg), T0_avg < 0.0)] = 10E0
+        T0_avg[np.logical_or(np.isinf(T0_avg), np.isnan(T0_avg), T0_avg < 0.0)] = 10E0
 
         return (n0_avg, T0_avg)
 
