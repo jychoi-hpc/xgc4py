@@ -6,6 +6,7 @@ import os
 import subprocess
 
 from math import sqrt, floor, exp
+import torch
 
 class XGC:
     class Mesh:
@@ -537,7 +538,114 @@ class XGC:
         # jyc: We need all plane data to get flux-surface average. Call f0_avg_diag
 
         return (den, u_para, T_perp, T_para, n0, T0)
-    
+
+    def f0_diag_torch(self, f0_inode1, ndata, isp, f0_f, progress=False):
+        """
+        This is a torch version of f0_diag.
+        Input:
+        f0_inode1: int
+        ndata: int (f0_inode2=f0_inode1+ndata)
+        isp: electron(=0) or ion(=1)
+        f0mesh: (F0mesh object) shoul have the following attrs:
+            f0_nmu: int
+            f0_nvp: int
+            f0_smu_max: float
+            f0_dsmu: float
+            f0_T_ev: (nsp, nnodes)
+            f0_grid_vol_vonly: (nsp, nnodes)
+            f0_dvp: double
+        mesh: (Mesh object) shoul have the following attrs:
+            nnodes: int  -- number of mesh nodes
+        f0_f: (ndata, f0_nmu+1, 2*f0_nvp+1) -- f-data
+
+        Output:
+        den: (ndata, f0_nmu+1, 2*f0_nvp+1)
+        u_para: (ndata, f0_nmu+1, 2*f0_nvp+1)
+        T_perp: (ndata, f0_nmu+1, 2*f0_nvp+1)
+        T_para: (ndata, f0_nmu+1, 2*f0_nvp+1)
+        n0: (ndata)
+        T0: (ndata)
+
+        All outputs are before performing flux-surface averaging
+        """
+
+        ## Aliases
+        f0_nmu = self.f0mesh.f0_nmu
+        f0_nvp = self.f0mesh.f0_nvp
+        f0_smu_max = self.f0mesh.f0_smu_max
+        f0_dsmu = self.f0mesh.f0_dsmu
+        f0_T_ev = self.f0mesh.f0_T_ev
+        f0_grid_vol_vonly = self.f0mesh.f0_grid_vol_vonly
+        f0_dvp = self.f0mesh.f0_dvp
+        nnodes = self.mesh.nnodes
+        mu_vol = self.f0mesh.mu_vol
+        vp_vol = self.f0mesh.vp_vol
+        f0_grid_vol = self.f0mesh.f0_grid_vol[f0_inode1:f0_inode1+ndata]
+        mu_vp_vol = self.f0mesh.mu_vp_vol
+        mu = torch.from_numpy(self.f0mesh.mu)
+        vp = torch.from_numpy(self.f0mesh.vp)
+        vth = self.f0mesh.vth[f0_inode1:f0_inode1+ndata]
+        vth2 = self.f0mesh.vth2[f0_inode1:f0_inode1+ndata]
+
+        ## Check
+        if f0_f.ndim == 2:
+            f0_f = f0_f[np.newaxis,:]
+        #print (f0_f.shape, (ndata, f0_nmu+1, f0_nvp*2+1))
+        assert(f0_f.shape[0] == ndata)
+        assert(f0_f.shape[1] == f0_nmu+1)
+        assert(f0_f.shape[2] >= f0_nvp*2+1)
+
+        sml_e_charge=1.6022E-19  ## electron charge (MKS)
+        sml_ev2j=sml_e_charge
+
+        ptl_e_mass_au=2E-2
+        ptl_mass_au=2E0
+        sml_prot_mass=1.6720E-27 ## proton mass (MKS)
+        ptl_mass = [ptl_e_mass_au*sml_prot_mass, ptl_mass_au*sml_prot_mass]
+
+        ptl_charge_eu=1.0  #! charge number
+        ptl_e_charge_eu=-1.0
+        ptl_charge = [ptl_e_charge_eu*sml_e_charge, ptl_charge_eu*sml_e_charge]
+
+        # (2020/12) use pre-computed in xgc4py
+        # ## index: imu, range: [0, f0_nmu]
+        # mu_vol = np.ones(f0_nmu+1)
+        # mu_vol[0] = 0.5
+        # mu_vol[-1] = 0.5
+
+        # ## index: ivp, range: [-f0_nvp, f0_nvp]
+        # vp_vol = np.ones(f0_nvp*2+1)
+        # vp_vol[0] = 0.5
+        # vp_vol[-1] = 0.5
+
+        #f0_smu_max = 3.0
+        #f0_dsmu = f0_smu_max/f0_nmu
+        # mu = (np.arange(f0_nmu+1, dtype=np.float64)*f0_dsmu)**2
+        # vp = np.arange(-f0_nvp, f0_nvp+1, dtype=np.float64)*f0_dvp
+
+        # (2020/12) update to use matrix-vector operations.
+        # 1) Density, parallel flow, and T_perp moments
+        vol_ = f0_grid_vol[:,np.newaxis,np.newaxis]*mu_vp_vol[np.newaxis,:,:]
+        den_ = f0_f * vol_
+        u_para_ = f0_f * vol_ * vth[:,np.newaxis,np.newaxis] * vp[np.newaxis,np.newaxis,:]
+        T_perp_ = f0_f * vol_ * 0.5 * mu[np.newaxis,:,np.newaxis] * vth2[:,np.newaxis,np.newaxis] * ptl_mass[isp]
+
+        s_den_ = torch.sum(den_, axis=(1,2))
+        u_para_ = u_para_/s_den_[:,np.newaxis,np.newaxis]
+        T_perp_ = T_perp_/s_den_[:,np.newaxis,np.newaxis]/sml_e_charge
+
+        # 2) T_para moment
+        upar_ = torch.sum(u_para_, axis=(1,2))/vth
+        en_ = 0.5 * (vp[np.newaxis,:] - upar_[:,np.newaxis])**2
+
+        T_para_ = f0_f * vol_ * en_[:,np.newaxis,:] * vth2[:,np.newaxis,np.newaxis] * ptl_mass[isp]
+        T_para_ = 2.0*T_para_/s_den_[:,np.newaxis,np.newaxis]/sml_e_charge
+
+        n0_ = s_den_
+        T0_ = (2.0*torch.sum(T_perp_, axis=(1,2))+torch.sum(T_para_, axis=(1,2)))/3.0
+
+        return (den_, u_para_, T_perp_, T_para_, n0_, T0_)
+
     def get_drift_velocity(self,iphi,node,mu,vp,isp,v_th):
         """
         Input:
