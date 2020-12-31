@@ -355,9 +355,9 @@ class XGC:
         self.grid.rhomax=self.sml_rhomax   #! rho min is 0.
         self.grid.drho = self.grid.rhomax/self.grid.nrho
         
-        if device is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.to(device)
+        self.device = device
+        if device is not None:
+            self.to(device)
 
     def f0_diag_future(self, f0_inode1, ndata, isp, f0_f, progress=False, nchunk=256, max_workers=16):
         from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -377,12 +377,6 @@ class XGC:
             return y
 
     def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
-        if isinstance(f0_f, (np.ndarray, np.generic)):
-            return self.f0_diag_numpy(f0_inode1, ndata, isp, f0_f, progress=False)
-        else:
-            return self.f0_diag_torch(f0_inode1, ndata, isp, f0_f, progress=False)
-
-    def f0_diag_numpy(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
         f0_inode1: int
