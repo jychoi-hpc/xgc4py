@@ -264,7 +264,7 @@ class XGC:
 
         return v2d
 
-    def __init__(self, expdir='', step=None):
+    def __init__(self, expdir='', step=None, device=None):
         self.expdir = expdir
         
         ## populate mesh
@@ -354,6 +354,10 @@ class XGC:
         self.grid.nrho=self.sml_grid_nrho  #! rho indexing starts from 0
         self.grid.rhomax=self.sml_rhomax   #! rho min is 0.
         self.grid.drho = self.grid.rhomax/self.grid.nrho
+        
+        if device is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)
 
     def f0_diag_future(self, f0_inode1, ndata, isp, f0_f, progress=False, nchunk=256, max_workers=16):
         from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -546,6 +550,26 @@ class XGC:
 
         # return (den, u_para, T_perp, T_para, n0, T0)
 
+    def to(self, device):
+        """
+        Create Torch tensors
+        """
+        self.device = device
+        self.torch_f0_grid_vol = torch.from_numpy(self.f0mesh.f0_grid_vol)
+        self.torch_mu_vp_vol = torch.from_numpy(self.f0mesh.mu_vp_vol)
+        self.torch_mu = torch.from_numpy(self.f0mesh.mu)
+        self.torch_vp = torch.from_numpy(self.f0mesh.vp)
+        self.torch_vth = torch.from_numpy(self.f0mesh.vth)
+        self.torch_vth2 = torch.from_numpy(self.f0mesh.vth2)
+
+        if self.torch_f0_grid_vol.device != device: self.torch_f0_grid_vol = self.torch_f0_grid_vol.to(self.device)
+        if self.torch_mu_vp_vol.device != device: self.torch_mu_vp_vol = self.torch_mu_vp_vol.to(self.device)
+        if self.torch_mu.device != device: self.torch_mu = self.torch_mu.to(self.device)
+        if self.torch_vp.device != device: self.torch_vp = self.torch_vp.to(self.device)
+        if self.torch_vth.device != device: self.torch_vth = self.torch_vth.to(self.device)
+        if self.torch_vth2.device != device: self.torch_vth2 = self.torch_vth2.to(self.device)
+        print ('device:', self.device)
+        
     def f0_diag_torch(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """
         This is a torch version of f0_diag.
@@ -577,6 +601,7 @@ class XGC:
         """
 
         ## Aliases
+        device = f0_f.device
         f0_nmu = self.f0mesh.f0_nmu
         f0_nvp = self.f0mesh.f0_nvp
         f0_smu_max = self.f0mesh.f0_smu_max
@@ -587,12 +612,13 @@ class XGC:
         nnodes = self.mesh.nnodes
         mu_vol = self.f0mesh.mu_vol
         vp_vol = self.f0mesh.vp_vol
-        f0_grid_vol = self.f0mesh.f0_grid_vol[f0_inode1:f0_inode1+ndata]
-        mu_vp_vol = self.f0mesh.mu_vp_vol
-        mu = torch.from_numpy(self.f0mesh.mu)
-        vp = torch.from_numpy(self.f0mesh.vp)
-        vth = self.f0mesh.vth[f0_inode1:f0_inode1+ndata]
-        vth2 = self.f0mesh.vth2[f0_inode1:f0_inode1+ndata]
+        
+        f0_grid_vol = self.torch_f0_grid_vol[f0_inode1:f0_inode1+ndata]
+        mu_vp_vol = self.torch_mu_vp_vol
+        mu = self.torch_mu
+        vp = self.torch_vp
+        vth = self.torch_vth[f0_inode1:f0_inode1+ndata]
+        vth2 = self.torch_vth2[f0_inode1:f0_inode1+ndata]
 
         ## Check
         if f0_f.ndim == 2:
@@ -634,6 +660,7 @@ class XGC:
         # 1) Density, parallel flow, and T_perp moments
         vol_ = f0_grid_vol[:,np.newaxis,np.newaxis]*mu_vp_vol[np.newaxis,:,:]
         den_ = f0_f * vol_
+        print ('den_', den_.shape, den_.device)        
         u_para_ = f0_f * vol_ * vth[:,np.newaxis,np.newaxis] * vp[np.newaxis,np.newaxis,:]
         T_perp_ = f0_f * vol_ * 0.5 * mu[np.newaxis,:,np.newaxis] * vth2[:,np.newaxis,np.newaxis] * ptl_mass[isp]
 
