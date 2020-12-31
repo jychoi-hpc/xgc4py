@@ -61,7 +61,18 @@ class XGC:
 
             #f0_smu_max = 3.0
             #f0_dsmu = f0_smu_max/f0_nmu
-            self.mu = (np.arange(self.f0_nmu+1, dtype=np.float64)*self.f0_dsmu)**2                
+            self.mu = (np.arange(self.f0_nmu+1, dtype=np.float64)*self.f0_dsmu)**2
+            self.vp = np.arange(-self.f0_nvp, self.f0_nvp+1, dtype=np.float64)*self.f0_dvp
+
+            ## pre-calculation for f0_diag
+            isp = 1
+            self.en_th = self.f0_T_ev[isp,:]*self.sml_ev2j
+            self.vth2 = self.en_th/self.ptl_mass[isp]
+            self.vth = np.sqrt(self.vth2)
+            self.f0_grid_vol = self.f0_grid_vol_vonly[isp,:]
+
+            _x, _y = np.meshgrid(self.mu_vol, self.vp_vol)
+            self.mu_vp_vol = _x*_y
 
     class Grid:
         class Mat:
@@ -398,6 +409,14 @@ class XGC:
         f0_grid_vol_vonly = self.f0mesh.f0_grid_vol_vonly
         f0_dvp = self.f0mesh.f0_dvp    
         nnodes = self.mesh.nnodes
+        mu_vol = self.f0mesh.mu_vol
+        vp_vol = self.f0mesh.vp_vol
+        f0_grid_vol = self.f0mesh.f0_grid_vol[f0_inode1:f0_inode1+ndata]
+        mu_vp_vol = self.f0mesh.mu_vp_vol
+        mu = self.f0mesh.mu
+        vp = self.f0mesh.vp
+        vth = self.f0mesh.vth[f0_inode1:f0_inode1+ndata]
+        vth2 = self.f0mesh.vth2[f0_inode1:f0_inode1+ndata]
 
         ## Check
         if f0_f.ndim == 2:
@@ -419,19 +438,44 @@ class XGC:
         ptl_e_charge_eu=-1.0
         ptl_charge = [ptl_e_charge_eu*sml_e_charge, ptl_charge_eu*sml_e_charge]
 
-        ## index: imu, range: [0, f0_nmu]
-        mu_vol = np.ones(f0_nmu+1)
-        mu_vol[0] = 0.5
-        mu_vol[-1] = 0.5
+        # (2020/12) use pre-computed in xgc4py
+        # ## index: imu, range: [0, f0_nmu]
+        # mu_vol = np.ones(f0_nmu+1)
+        # mu_vol[0] = 0.5
+        # mu_vol[-1] = 0.5
 
-        ## index: ivp, range: [-f0_nvp, f0_nvp]
-        vp_vol = np.ones(f0_nvp*2+1)
-        vp_vol[0] = 0.5
-        vp_vol[-1] = 0.5
+        # ## index: ivp, range: [-f0_nvp, f0_nvp]
+        # vp_vol = np.ones(f0_nvp*2+1)
+        # vp_vol[0] = 0.5
+        # vp_vol[-1] = 0.5
 
         #f0_smu_max = 3.0
         #f0_dsmu = f0_smu_max/f0_nmu
-        mu = (np.arange(f0_nmu+1, dtype=np.float64)*f0_dsmu)**2
+        # mu = (np.arange(f0_nmu+1, dtype=np.float64)*f0_dsmu)**2
+        # vp = np.arange(-f0_nvp, f0_nvp+1, dtype=np.float64)*f0_dvp
+
+        # (2020/12) update to use matrix-vector operations.
+        # 1) Density, parallel flow, and T_perp moments
+        vol_ = f0_grid_vol[:,np.newaxis,np.newaxis]*mu_vp_vol[np.newaxis,:,:]
+        den_ = f0_f * vol_
+        u_para_ = f0_f * vol_ * vth[:,np.newaxis,np.newaxis] * vp[np.newaxis,np.newaxis,:]
+        T_perp_ = f0_f * vol_ * 0.5 * mu[np.newaxis,:,np.newaxis] * vth2[:,np.newaxis,np.newaxis] * ptl_mass[isp]
+
+        s_den_ = np.sum(den_, axis=(1,2))
+        u_para_ = u_para_/s_den_[:,np.newaxis,np.newaxis]
+        T_perp_ = T_perp_/s_den_[:,np.newaxis,np.newaxis]/sml_e_charge
+
+        # 2) T_para moment
+        upar_ = np.sum(u_para_, axis=(1,2))/vth
+        en_ = 0.5 * (vp[np.newaxis,:] - upar_[:,np.newaxis])**2
+
+        T_para_ = f0_f * vol_ * en_[:,np.newaxis,:] * vth2[:,np.newaxis,np.newaxis] * ptl_mass[isp]
+        T_para_ = 2.0*T_para_/s_den_[:,np.newaxis,np.newaxis]/sml_e_charge
+
+        n0_ = s_den_
+        T0_ = (2.0*np.sum(T_perp_, axis=(1,2))+np.sum(T_para_, axis=(1,2)))/3.0
+
+        return (den_, u_para_, T_perp_, T_para_, n0_, T0_)
 
         # out
         den = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
