@@ -373,6 +373,12 @@ class XGC:
             return y
 
     def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
+        if isinstance(f0_f, (np.ndarray, np.generic)):
+            return self.f0_diag_numpy(f0_inode1, ndata, isp, f0_f, progress=False)
+        else:
+            return self.f0_diag_torch(f0_inode1, ndata, isp, f0_f, progress=False)
+
+    def f0_diag_numpy(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
         f0_inode1: int
@@ -478,66 +484,67 @@ class XGC:
 
         return (den_, u_para_, T_perp_, T_para_, n0_, T0_)
 
-        # out
-        den = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
-        u_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
-        T_perp = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
-        T_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
+        ## (2020/12) Just for a reference
+        # # out
+        # den = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
+        # u_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
+        # T_perp = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
+        # T_para = np.zeros((ndata, f0_nmu+1, 2*f0_nvp+1))
 
-        # 1) Density, parallel flow, and T_perp moments
-        for inode in tqdm(range(0, ndata), disable=not progress):
-            ## Mesh properties
-            en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
-            vth = np.sqrt(en_th/ptl_mass[isp])
-            f0_grid_vol = f0_grid_vol_vonly[isp,f0_inode1+inode]
+        # # 1) Density, parallel flow, and T_perp moments
+        # for inode in tqdm(range(0, ndata), disable=not progress):
+        #     ## Mesh properties
+        #     en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
+        #     vth = np.sqrt(en_th/ptl_mass[isp])
+        #     f0_grid_vol = f0_grid_vol_vonly[isp,f0_inode1+inode]
 
-            for imu in range(0, f0_nmu+1):
-                for ivp in range(0, f0_nvp*2+1):
-                    ## Vspace properties
-                    vol = f0_grid_vol * mu_vol[imu] * vp_vol[ivp]
-                    vp = (ivp - f0_nvp) * f0_dvp
-                    en = 0.5 * mu[imu]
+        #     for imu in range(0, f0_nmu+1):
+        #         for ivp in range(0, f0_nvp*2+1):
+        #             ## Vspace properties
+        #             vol = f0_grid_vol * mu_vol[imu] * vp_vol[ivp]
+        #             vp = (ivp - f0_nvp) * f0_dvp
+        #             en = 0.5 * mu[imu]
 
-                    f = f0_f[inode, imu, ivp] #f0_f(ivp,inode,imu,isp)
-                    den[inode, imu, ivp] = f * vol
-                    u_para[inode, imu, ivp] = f * vol * vp * vth
-                    T_perp[inode, imu, ivp] = f * vol * en * vth**2 * ptl_mass[isp]
-                    #if (inode==0): print ('imu,inode,ivp,ptl_mass,vth,en,vol=',imu,inode,ivp,ptl_mass[isp],vth,en,vol)
+        #             f = f0_f[inode, imu, ivp] #f0_f(ivp,inode,imu,isp)
+        #             den[inode, imu, ivp] = f * vol
+        #             u_para[inode, imu, ivp] = f * vol * vp * vth
+        #             T_perp[inode, imu, ivp] = f * vol * en * vth**2 * ptl_mass[isp]
+        #             #if (inode==0): print ('imu,inode,ivp,ptl_mass,vth,en,vol=',imu,inode,ivp,ptl_mass[isp],vth,en,vol)
 
-        for inode in range(0, ndata):
-            u_para[inode,:] = u_para[inode,:]/np.sum(den[inode,:])
-            T_perp[inode,:] = T_perp[inode,:]/np.sum(den[inode,:])/sml_e_charge
+        # for inode in range(0, ndata):
+        #     u_para[inode,:] = u_para[inode,:]/np.sum(den[inode,:])
+        #     T_perp[inode,:] = T_perp[inode,:]/np.sum(den[inode,:])/sml_e_charge
 
-        upar = np.sum(u_para, axis=(1,2))
+        # upar = np.sum(u_para, axis=(1,2))
 
-        # 2) T_para moment
-        for inode in tqdm(range(0, ndata), disable=not progress):
-            ## Mesh properties
-            en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
-            vth = np.sqrt(en_th/ptl_mass[isp])
-            f0_grid_vol = f0_grid_vol_vonly[isp,f0_inode1+inode]
+        # # 2) T_para moment
+        # for inode in tqdm(range(0, ndata), disable=not progress):
+        #     ## Mesh properties
+        #     en_th = f0_T_ev[isp,f0_inode1+inode]*sml_ev2j
+        #     vth = np.sqrt(en_th/ptl_mass[isp])
+        #     f0_grid_vol = f0_grid_vol_vonly[isp,f0_inode1+inode]
 
-            for imu in range(0, f0_nmu+1):
-                for ivp in range(0, f0_nvp*2+1):
-                    ## Vspace properties
-                    vol = f0_grid_vol * mu_vol[imu] * vp_vol[ivp]
-                    vp = (ivp - f0_nvp) * f0_dvp
-                    en = 0.5 * (vp - upar[inode] / vth)**2
+        #     for imu in range(0, f0_nmu+1):
+        #         for ivp in range(0, f0_nvp*2+1):
+        #             ## Vspace properties
+        #             vol = f0_grid_vol * mu_vol[imu] * vp_vol[ivp]
+        #             vp = (ivp - f0_nvp) * f0_dvp
+        #             en = 0.5 * (vp - upar[inode] / vth)**2
 
-                    f = f0_f[inode, imu, ivp] #f0_f(ivp,inode,imu,isp)
-                    T_para[inode, imu, ivp] = f * vol * en * vth**2 * ptl_mass[isp]
+        #             f = f0_f[inode, imu, ivp] #f0_f(ivp,inode,imu,isp)
+        #             T_para[inode, imu, ivp] = f * vol * en * vth**2 * ptl_mass[isp]
 
-        for inode in range(0, ndata):
-            T_para[inode,:] = 2.0*T_para[inode,:]/np.sum(den[inode,:])/sml_e_charge
+        # for inode in range(0, ndata):
+        #     T_para[inode,:] = 2.0*T_para[inode,:]/np.sum(den[inode,:])/sml_e_charge
 
-        n0 = np.sum(den, axis=(1,2))
-        T0 = (2.0*np.sum(T_perp, axis=(1,2))+np.sum(T_para, axis=(1,2)))/3.0
+        # n0 = np.sum(den, axis=(1,2))
+        # T0 = (2.0*np.sum(T_perp, axis=(1,2))+np.sum(T_para, axis=(1,2)))/3.0
 
-        # 3) Get the flux-surface average of n and T
-        #    And the toroidal averages of n, T, and u_par
-        # jyc: We need all plane data to get flux-surface average. Call f0_avg_diag
+        # # 3) Get the flux-surface average of n and T
+        # #    And the toroidal averages of n, T, and u_par
+        # # jyc: We need all plane data to get flux-surface average. Call f0_avg_diag
 
-        return (den, u_para, T_perp, T_para, n0, T0)
+        # return (den, u_para, T_perp, T_para, n0, T0)
 
     def f0_diag_torch(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """
