@@ -654,7 +654,6 @@ class XGC:
         # 1) Density, parallel flow, and T_perp moments
         vol_ = f0_grid_vol[:,np.newaxis,np.newaxis]*mu_vp_vol[np.newaxis,:,:]
         den_ = f0_f * vol_
-        print ('den_', den_.shape, den_.device)        
         u_para_ = f0_f * vol_ * vth[:,np.newaxis,np.newaxis] * vp[np.newaxis,np.newaxis,:]
         T_perp_ = f0_f * vol_ * 0.5 * mu[np.newaxis,:,np.newaxis] * vth2[:,np.newaxis,np.newaxis] * ptl_mass[isp]
 
