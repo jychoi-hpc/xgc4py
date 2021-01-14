@@ -96,8 +96,18 @@ class XGC:
                         y[k] = y[k] + self.value[i,j] * x[i]
                 return y
 
+            def mat_mult(self, x):
+                assert self.m == len(x)
+                y = np.zeros([self.n,])
+                for i in range(self.n):
+                    for j in range(self.nelement[i]):
+                        k = self.eindex[i,j]-1
+                        y[i] = y[i] + self.value[i,j] * x[k]
+                return y
+
         def __init__(self, expdir=''):
             self.cnv_2d_00 = self.Mat()
+            self.cnv_00_2d = self.Mat()
             
             fname = os.path.join(expdir, 'xgc.fluxavg.bp')
             print (f"Reading: {fname}")
@@ -108,6 +118,14 @@ class XGC:
                 self.cnv_2d_00.value = f.read('value')
                 self.cnv_2d_00.eindex = f.read('eindex')
                 self.cnv_2d_00.nelement = f.read('nelement')
+
+                self.cnv_00_2d.n = f.read('nnode')
+                self.cnv_00_2d.m = f.read('npsi')
+                self.cnv_00_2d.width = f.read('width2')
+                self.cnv_00_2d.value = f.read('value2')
+                self.cnv_00_2d.eindex = f.read('eindex2')
+                self.cnv_00_2d.nelement = f.read('nelement2')
+
                 self.cnv_norm_1d00 = f.read('norm1d')
                 self.cnv_norm_2d = f.read('norm2d')
                 self.npsi = f.read('npsi').item()
@@ -159,6 +177,10 @@ class XGC:
                 self.E_rho_ff = f.read('E_rho_ff') # (nphi,nnodes,3,2,3)
                 self.pot_rho_ff = f.read('pot_rho_ff') # (nphi,nnodes,3,2)
                 self.pot0 = f.read('pot0') # (nphi,nnodes)
+            if len(self.E_rho_ff) == 0:
+                print (f"==> Warning: no E_rho_ff/pot_rho_ff/pot0 data in {fname}")
+                print (f"==> Warning: Plese check XGC_F_COUPLING enabled.")
+            
 
     """
       ! check if region 1 or 2
@@ -217,6 +239,7 @@ class XGC:
         return v1d
 
     """
+    !! With CONVERT_GRID2 Off
     subroutine convert_001d_2_grid(grid,v1d,v2d)
       use eq_module
       use grid_class
@@ -245,8 +268,26 @@ class XGC:
       end do
 
     end subroutine convert_001d_2_grid
+
+    !! With CONVERT_GRID2 On
+    subroutine convert_001d_2_grid(grid,v1d,v2d)
+    use eq_module
+    use grid_class
+    implicit none
+    type(grid_type), intent(in) :: grid
+    real (8), intent(in)  :: v1d(grid%npsi_surf)
+    real (8), intent(out) :: v2d(grid%nnode)
+
+    print *, "!! convert_001d_2_grid for CONVERT_GRID2"
+    call mat_mult(grid%cnv_00_2d,v1d,v2d)
+
+    end subroutine convert_001d_2_grid
     """
-    def convert_001d_2_grid(self, v1d):
+    def convert_001d_2_grid(self, v1d, CONVERT_GRID2=True):
+        if CONVERT_GRID2:
+            v2d = self.grid.cnv_00_2d.mat_mult(v1d)
+            return v2d
+        
         v2d = np.zeros(self.grid.nnodes)
         for i in range(self.grid.nnodes):
             pn=(self.grid.psi[i]-self.grid.psi00min)/self.grid.dpsi00
@@ -739,7 +780,7 @@ class XGC:
 
         return (v_mag,v_exb,v_pardrift,pot_rho,grad_psi_sqr)
 
-    def f0_avg_diag(self, f0_inode1, ndata, n0_all, T0_all):
+    def f0_avg_diag(self, f0_inode1, ndata, n0_all, T0_all, CONVERT_GRID2=True):
         """ 
         Input:
         nphi: int -- total number of planes
@@ -768,7 +809,7 @@ class XGC:
         n0_avg[f0_inode1:f0_inode1+ndata] = n0
 
         tmp00_surf = self.convert_grid_2_001d(n0_avg)
-        n0_avg = self.convert_001d_2_grid(tmp00_surf)
+        n0_avg = self.convert_001d_2_grid(tmp00_surf, CONVERT_GRID2=CONVERT_GRID2)
         n0_avg[np.logical_or(np.isinf(n0_avg), np.isnan(n0_avg), n0_avg < 0.0)] = 1E17
 
         ## T0
@@ -777,7 +818,7 @@ class XGC:
         T0_avg[f0_inode1:f0_inode1+ndata] = T0
 
         tmp00_surf = self.convert_grid_2_001d(T0_avg)
-        T0_avg = self.convert_001d_2_grid(tmp00_surf)
+        T0_avg = self.convert_001d_2_grid(tmp00_surf, CONVERT_GRID2=CONVERT_GRID2)
         T0_avg[np.logical_or(np.isinf(T0_avg), np.isnan(T0_avg), T0_avg < 0.0)] = 10E0
 
         return (n0_avg[f0_inode1:f0_inode1+ndata], T0_avg[f0_inode1:f0_inode1+ndata])
