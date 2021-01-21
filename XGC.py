@@ -19,9 +19,16 @@ class XGC:
                 self.rz = f.read('rz')
                 self.conn = f.read('nd_connect_list')
                 self.psi = f.read('psi')
+                self.psi_surf = f.read('psi_surf')
+                self.surf_idx = f.read('surf_idx')
+                self.surf_len = f.read('surf_len')
 
             self.r = self.rz[:,0]
             self.z = self.rz[:,1]
+
+            if len(self.surf_len) == 0:
+                print (f"==> Warning: no psi_surf/surf_len/surf_idx in {fname}")
+                print (f"==> Warning: Plese check if CONVERT_GRID2 enabled.")
 
     class F0mesh:
         def __init__(self, expdir=''):
@@ -179,7 +186,7 @@ class XGC:
                 self.pot0 = f.read('pot0') # (nphi,nnodes)
             if len(self.E_rho_ff) == 0:
                 print (f"==> Warning: no E_rho_ff/pot_rho_ff/pot0 data in {fname}")
-                print (f"==> Warning: Plese check XGC_F_COUPLING enabled.")
+                print (f"==> Warning: Plese check if XGC_F_COUPLING enabled.")
             
 
     """
