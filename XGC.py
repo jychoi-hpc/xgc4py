@@ -22,6 +22,7 @@ class XGC:
                 self.psi_surf = f.read('psi_surf')
                 self.surf_idx = f.read('surf_idx')
                 self.surf_len = f.read('surf_len')
+                self.nextnode = f.read('nextnode')
 
             self.r = self.rz[:,0]
             self.z = self.rz[:,1]
@@ -406,6 +407,19 @@ class XGC:
         self.device = device
         if device is not None:
             self.to(device)
+
+        ## untwist
+        nextnode_list = list()
+        init = list(range(self.mesh.nnodes))
+        nextnode_list.append(init)
+        for iphi in range(1,self.nphi):
+            prev = nextnode_list[iphi-1]
+            current = [0,]*self.mesh.nnodes
+            for i in range(self.mesh.nnodes):
+                current[i] = self.mesh.nextnode[prev[i]]
+                #print (i, prev[i], nextnode[prev[i]])
+            nextnode_list.append(current)
+        self.nextnode_arr = np.array(nextnode_list)
 
     def f0_diag_future(self, f0_inode1, ndata, isp, f0_f, progress=False, nchunk=256, max_workers=16):
         from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
