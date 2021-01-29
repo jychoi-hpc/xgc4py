@@ -31,6 +31,25 @@ class XGC:
                 print (f"==> Warning: no psi_surf/surf_len/surf_idx in {fname}")
                 print (f"==> Warning: Plese check if CONVERT_GRID2 enabled.")
 
+            bl = np.zeros_like(self.nextnode, dtype=bool)
+            for i in range(len(self.surf_len)):
+                n = self.surf_len[i]
+                k = self.surf_idx[i,:n]-1
+                for j in k:
+                    bl[j] = True
+
+            self.not_in_surf=np.arange(len(self.nextnode))[~bl]
+
+        def surf_nodes(self, i):
+            m = len(self.surf_len)
+            if i < m:
+                n = self.surf_len[i]
+                k = self.surf_idx[i,:n]-1
+            else:
+                print (f"==> Warning: surf index out of range (max: {m}). Returning non surf nodes.")
+                k = self.not_in_surf
+            return (k)
+
     class F0mesh:
         def __init__(self, expdir=''):
             fname = os.path.join(expdir, 'xgc.f0.mesh.bp')
