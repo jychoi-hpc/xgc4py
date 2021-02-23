@@ -6,7 +6,11 @@ import os
 import subprocess
 
 from math import sqrt, floor, exp
-import torch
+try:
+    import torch
+except ImportError:
+    import warnings
+    warnings.warn("No torch module. Disabled.")
 
 class XGC:
     class Mesh:
