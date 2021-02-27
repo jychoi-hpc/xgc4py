@@ -197,6 +197,7 @@ class XGC:
                     self.rgn = f.read('rgn')
             else:
                 print (f"[WARN] cannot open: {fname}")
+                print (f"==> Warning: f0_non_adiabatic will be incorrect.")
 
     class PSN:
         def __init__(self, expdir='', step=None):
@@ -372,20 +373,38 @@ class XGC:
             self.eq_x_z = f.read('eq_x_z')
             self.eq_x_slope = f.read('eq_x_slope')
 
-
+            ## Added by Jong
             self.eq_x2_psi = f.read('eq_x2_psi')
             self.eq_x2_r = f.read('eq_x2_r')
             self.eq_x2_z = f.read('eq_x2_z')
             self.eq_x2_slope = f.read('eq_x2_slope')
 
+        if self.eq_x2_psi.ndim > 0:
+            print (f"==> Warning: no eq_x2_psi/eq_x2_r/eq_x2_z/eq_x2_slope data in {fname}")
+            print (f"==> Warning: f0_avg_diag will be incorrect.")
+
         self.epsil_psi =  1E-5
 
-        fname = os.path.join(expdir, 'xgc.f0analysis.static.bp')
-        if os.path.exists(fname):
-            print (f"Reading: {fname}")
-            with ad2.open(fname, 'r') as f:
-                self.sml_inpsi = f.read('sml_inpsi')
-                self.sml_outpsi = f.read('sml_outpsi')
+        # fname = os.path.join(expdir, 'xgc.f0analysis.static.bp')
+        # if os.path.exists(fname):
+        #     print (f"Reading: {fname}")
+        #     with ad2.open(fname, 'r') as f:
+        #         self.sml_inpsi = f.read('sml_inpsi')
+        #         self.sml_outpsi = f.read('sml_outpsi')
+
+        fname = os.path.join(expdir, 'fort.input.used')
+        result = subprocess.run(['/usr/bin/grep', '-a', 'SML_OUTPSI', fname], stdout=subprocess.PIPE)
+        kv = result.stdout.decode().replace(' ','').replace(',','').split('\n')[0].split('=')
+        self.sml_outpsi = float(kv[1])
+        self.sml_outpsi = self.sml_outpsi * self.eq_x_psi
+        # print ('sml_outpsi=', self.sml_outpsi)
+
+        fname = os.path.join(expdir, 'fort.input.used')
+        result = subprocess.run(['/usr/bin/grep', '-a', 'SML_INPSI', fname], stdout=subprocess.PIPE)
+        kv = result.stdout.decode().replace(' ','').replace(',','').split('\n')[0].split('=')
+        self.sml_inpsi = float(kv[1])
+        self.sml_inpsi = self.sml_inpsi * self.eq_x_psi
+        # print ('sml_inpsi=', self.sml_inpsi)
 
         self.sml_00_npsi = self.grid.npsi
         print ('sml_00_npsi, sml_inpsi, sml_outpsi=', self.sml_00_npsi, self.sml_inpsi, self.sml_outpsi)
