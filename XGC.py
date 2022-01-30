@@ -1048,6 +1048,9 @@ class XGC:
         
         return (fn_n0, fn_turb, np.moveaxis(boltz_fac_n0,1,0), np.moveaxis(dpot_n0,1,0), np.moveaxis(v_exb_n0,1,0))
 
+def hello(x):
+    print("hello", x)
+
 if __name__ == "__main__":
     import argparse
     import torch
