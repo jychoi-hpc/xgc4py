@@ -126,7 +126,23 @@ cdef public void xgc4py_test_print2(double* data, long* shape, int ndim):
     xgcexp.test_print(z)
     xgcexp.test_print(x)
 
-cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f, long* shape, int ndim):
+cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f, long* shape, int ndim,
+                                double* den):
+    """
+    This is a wrapper cython function to call f0_diag from C/C++.
+    Parameters:
+        f0_inode1 : offset
+        ndata     : number of mesh nodes to calculate
+        isp       : electron(=0) or ion(=1)
+        f0_f      : pointer of f0_f double array in C/C++ side
+        shape     : shape of f0_f data
+        ndim      : number of dimension of f0_f (asume to be 3)
+        den       : (output) pointer of density array in C/C++ side. 
+                    Assume the memory is already allocated. 
+                    It should be same size of f0_f
+        
+
+    """
     global xgcexp
 
     ## shape setup
@@ -164,3 +180,8 @@ cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f,
 
     (den_, u_para_, T_perp_, T_para_, n0_, T0_) = xgcexp.f0_diag(f0_inode1, ndata, isp, x)
     print (den_.shape, u_para_.shape, T_perp_.shape, T_para_.shape, n0_.shape, T0_.shape)
+
+    cdef np.ndarray[np.double_t, ndim=3, mode='c'] out_den_buff
+
+    out_den_buff = np.ascontiguousarray(den_, dtype=np.double)
+    memcpy(den, <double*> out_den_buff.data, den_.nbytes)

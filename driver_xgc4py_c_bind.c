@@ -29,13 +29,14 @@ main()
     int f0_f_ndim = 3;
 
     f0_f = malloc(16395*39*39*sizeof(double));
-    int i;
     for (int i=0; i<16395*39*39; i++)
     {
         f0_f[i] = 1.0;
     }
-    
-    xgc4py_f0_diag(f0_f_offset, f0_f_ndata, isp, f0_f, f0_f_shap, f0_f_ndim);
+
+    double *den = malloc(16395*39*39*sizeof(double));
+
+    xgc4py_f0_diag(f0_f_offset, f0_f_ndata, isp, f0_f, f0_f_shap, f0_f_ndim, den);
 
     Py_Finalize();
     return 0;
