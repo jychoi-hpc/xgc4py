@@ -40,6 +40,42 @@ cdef public void xgc4py_init(char* expdir, int timestep):
     xgcexp = XGC("d3d_coarse_v2", step=timestep)
     log (xgcexp)
 
+cdef np.ndarray double_arr_to_numpy(double* data, long* shape, int ndim):
+    ## shape setup
+    z = np.zeros(ndim, dtype=np.int)
+    cdef np.ndarray[np.int_t, ndim=1, mode='c'] z_buff = np.ascontiguousarray(z, dtype=np.int)
+    cdef long* z_buff_data = <long*> z_buff.data
+    memcpy(z_buff_data, shape, z.nbytes)
+
+    ## f0 setup 
+    ## This is a workaround to set ndim
+    cdef np.ndarray[np.double_t, ndim=1, mode='c'] x_buff1
+    cdef np.ndarray[np.double_t, ndim=2, mode='c'] x_buff2
+    cdef np.ndarray[np.double_t, ndim=3, mode='c'] x_buff3
+    cdef np.ndarray[np.double_t, ndim=4, mode='c'] x_buff4
+    cdef np.ndarray[np.double_t, ndim=5, mode='c'] x_buff5
+    cdef double* buff
+
+    x = np.zeros(z, dtype=np.double)
+    if ndim == 1:
+        x_buff1 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff1.data
+    if ndim == 2:
+        x_buff2 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff2.data
+    elif ndim == 3:
+        x_buff3 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff3.data
+    elif ndim == 4:
+        x_buff4 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff4.data
+    elif ndim == 5:
+        x_buff5 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff5.data
+    memcpy(buff, data, x.nbytes)
+
+    return x
+
 """
 Test with numpy
 """
@@ -89,3 +125,42 @@ cdef public void xgc4py_test_print2(double* data, long* shape, int ndim):
 
     xgcexp.test_print(z)
     xgcexp.test_print(x)
+
+cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f, long* shape, int ndim):
+    global xgcexp
+
+    ## shape setup
+    z = np.zeros(ndim, dtype=np.int)
+    cdef np.ndarray[np.int_t, ndim=1, mode='c'] z_buff = np.ascontiguousarray(z, dtype=np.int)
+    cdef long* z_buff_data = <long*> z_buff.data
+    memcpy(z_buff_data, shape, z.nbytes)
+
+    ## f0 setup 
+    ## This is a workaround to set ndim
+    cdef np.ndarray[np.double_t, ndim=1, mode='c'] x_buff1
+    cdef np.ndarray[np.double_t, ndim=2, mode='c'] x_buff2
+    cdef np.ndarray[np.double_t, ndim=3, mode='c'] x_buff3
+    cdef np.ndarray[np.double_t, ndim=4, mode='c'] x_buff4
+    cdef np.ndarray[np.double_t, ndim=5, mode='c'] x_buff5
+    cdef double* buff
+
+    x = np.zeros(z, dtype=np.double)
+    if ndim == 1:
+        x_buff1 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff1.data
+    if ndim == 2:
+        x_buff2 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff2.data
+    elif ndim == 3:
+        x_buff3 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff3.data
+    elif ndim == 4:
+        x_buff4 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff4.data
+    elif ndim == 5:
+        x_buff5 = np.ascontiguousarray(x, dtype=np.double)
+        buff = <double*> x_buff5.data
+    memcpy(buff, f0_f, x.nbytes)
+
+    (den_, u_para_, T_perp_, T_para_, n0_, T0_) = xgcexp.f0_diag(f0_inode1, ndata, isp, x)
+    print (den_.shape, u_para_.shape, T_perp_.shape, T_para_.shape, n0_.shape, T0_.shape)
