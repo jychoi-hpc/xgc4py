@@ -2,7 +2,7 @@ cybridge=xgc4py_c_bind
 target=driver_xgc4py_c_bind
 
 CC=gcc
-CFLAGS= `python3-config --cflags`
+CFLAGS=`python3-config --cflags` -I`python -c "import numpy; print(numpy.get_include())"`
 LDFLAGS=`python3-config --ldflags` -L${HOME}/anaconda3/lib -lpython3.9 -Xlinker -rpath -Xlinker ${HOME}/anaconda3/lib
 
 all:
@@ -16,4 +16,4 @@ clean:
 	rm -rf __pycache__
 
 test:
-	PYTHONHOME=$HOME/anaconda3 ./$(cybridge)
+	./$(target)

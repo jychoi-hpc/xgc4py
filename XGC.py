@@ -480,6 +480,9 @@ class XGC:
             y = list(map(lambda a: np.concatenate(a), zip(*alist)))
             return y
 
+    def test_print(self, x):
+        print (x)
+
     def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
