@@ -126,8 +126,9 @@ cdef public void xgc4py_test_print2(double* data, long* shape, int ndim):
     xgcexp.test_print(z)
     xgcexp.test_print(x)
 
-cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f, long* shape, int ndim,
-                                double* den):
+cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, 
+            double* f0_f, long* shape, int ndim,
+            double* den, double* u_para, double* T_perp, double* T_para):
     """
     This is a wrapper cython function to call f0_diag from C/C++.
     Parameters:
@@ -140,6 +141,9 @@ cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f,
         den       : (output) pointer of density array in C/C++ side. 
                     Assume the memory is already allocated. 
                     It should be same size of f0_f
+        u_para    : (output) pointer of u_para array in C/C++ side. Same assuption with den
+        T_perp    : (output) pointer of T_perp array in C/C++ side. Same assuption with den
+        T_para    : (output) pointer of T_para array in C/C++ side. Same assuption with den
         
 
     """
@@ -182,6 +186,18 @@ cdef public void xgc4py_f0_diag(int f0_inode1, int ndata, int isp, double* f0_f,
     print (den_.shape, u_para_.shape, T_perp_.shape, T_para_.shape, n0_.shape, T0_.shape)
 
     cdef np.ndarray[np.double_t, ndim=3, mode='c'] out_den_buff
+    cdef np.ndarray[np.double_t, ndim=3, mode='c'] out_u_para_buff
+    cdef np.ndarray[np.double_t, ndim=3, mode='c'] out_T_perp_buff
+    cdef np.ndarray[np.double_t, ndim=3, mode='c'] out_T_para_buff
 
     out_den_buff = np.ascontiguousarray(den_, dtype=np.double)
     memcpy(den, <double*> out_den_buff.data, den_.nbytes)
+
+    out_u_para_buff = np.ascontiguousarray(u_para_, dtype=np.double)
+    memcpy(u_para, <double*> out_u_para_buff.data, u_para_.nbytes)
+
+    out_T_perp_buff = np.ascontiguousarray(T_perp_, dtype=np.double)
+    memcpy(T_perp, <double*> out_T_perp_buff.data, T_perp_.nbytes)
+
+    out_T_para_buff = np.ascontiguousarray(T_para_, dtype=np.double)
+    memcpy(T_para, <double*> out_T_para_buff.data, T_para_.nbytes)

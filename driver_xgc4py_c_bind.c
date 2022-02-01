@@ -10,11 +10,6 @@ main()
     call_hello(77);
     xgc4py_init("d3d_coarse_v2", 420);
 
-    double data[6] = {1.,2.,3.,4.,5.,6.};
-    long shape[2] = {2,3};
-    xgc4py_test_print(data, 3);
-    xgc4py_test_print2(data, shape, 2);
-
     /*
     den, upara, Tperp, Tpara, fn0, fT0 = \
         xgcexp.f0_diag_future(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, progress=True)
@@ -35,8 +30,13 @@ main()
     }
 
     double *den = malloc(16395*39*39*sizeof(double));
+    double *u_para = malloc(16395*39*39*sizeof(double));
+    double *T_perp = malloc(16395*39*39*sizeof(double));
+    double *T_para = malloc(16395*39*39*sizeof(double));
 
-    xgc4py_f0_diag(f0_f_offset, f0_f_ndata, isp, f0_f, f0_f_shap, f0_f_ndim, den);
+    xgc4py_f0_diag(f0_f_offset, f0_f_ndata, isp, 
+                f0_f, f0_f_shap, f0_f_ndim,  /* f0_f data (input) */
+                den, u_para, T_perp, T_para); /* (output) */
 
     Py_Finalize();
     return 0;
