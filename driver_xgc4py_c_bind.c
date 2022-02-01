@@ -4,10 +4,12 @@
 int
 main() 
 {
+    /* Setup */
     PyImport_AppendInittab("xgc4py_c_bind", PyInit_xgc4py_c_bind);
     Py_Initialize();
     PyImport_ImportModule("xgc4py_c_bind");
-    call_hello(77);
+
+    /* Initialization */
     xgc4py_init("d3d_coarse_v2", 420);
 
     /*
@@ -24,6 +26,7 @@ main()
     int f0_f_ndim = 3;
 
     f0_f = malloc(16395*39*39*sizeof(double));
+    /* Should be replaced by adios2 read */
     for (int i=0; i<16395*39*39; i++)
     {
         f0_f[i] = 1.0;
@@ -34,6 +37,7 @@ main()
     double *T_perp = malloc(16395*39*39*sizeof(double));
     double *T_para = malloc(16395*39*39*sizeof(double));
 
+    /* Call f0_diag */
     xgc4py_f0_diag(f0_f_offset, f0_f_ndata, isp, 
                 f0_f, f0_f_shap, f0_f_ndim,  /* f0_f data (input) */
                 den, u_para, T_perp, T_para); /* (output) */
