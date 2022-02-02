@@ -14,16 +14,10 @@ import torch
 
 from libc.string cimport memcpy
 
-import sys
-sys.path.insert(0, '')
-
-from XGC import XGC, hello
+from XGC import XGC
 
 cimport numpy as np
 np.import_array()
-
-cdef public void call_hello(int x):
-    hello(x)
 
 cdef xgcexp
 

@@ -22,4 +22,4 @@ clean:
 	rm -rf __pycache__
 
 test:
-	./$(target)
+	PYTHONPATH=/Users/jyc/project/xgc4py:${PYTHONPATH} ./$(target)
