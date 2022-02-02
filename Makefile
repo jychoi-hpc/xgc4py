@@ -1,9 +1,15 @@
 cybridge=xgc4py_c_bind
 target=driver_xgc4py_c_bind
 
-CC=gcc
-CFLAGS=`python3-config --cflags` -I`python -c "import numpy; print(numpy.get_include())"`
-LDFLAGS=`python3-config --ldflags` -L${HOME}/anaconda3/lib -lpython3.9 -Xlinker -rpath -Xlinker ${HOME}/anaconda3/lib
+CC=mpicxx
+
+NUMPY_INCLUDE=-I`python -c "import numpy; print(numpy.get_include())"`
+
+ADIOS2_CFLAGS=`adios2-config --cxx-flags`
+ADIOS2_LIBS=`adios2-config --cxx-libs`
+
+CFLAGS=`python3-config --cflags` ${NUMPY_INCLUDE} ${ADIOS2_CFLAGS}
+LDFLAGS=`python3-config --ldflags` -L${HOME}/anaconda3/lib -lpython3.9 -Xlinker -rpath -Xlinker ${HOME}/anaconda3/lib ${ADIOS2_LIBS}
 
 all:
 	cython -3 $(cybridge).pyx

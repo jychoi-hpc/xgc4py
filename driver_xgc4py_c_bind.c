@@ -1,6 +1,8 @@
 #include <Python.h>
 #include "xgc4py_c_bind.h"
 
+#include <adios2.h>
+
 int
 main() 
 {
@@ -25,22 +27,30 @@ main()
     long f0_f_shap[3] = {16395, 39, 39};
     int f0_f_ndim = 3;
 
-    f0_f = malloc(16395*39*39*sizeof(double));
-    /* Should be replaced by adios2 read */
+    f0_f = (double*) malloc(16395*39*39*sizeof(double));
     for (int i=0; i<16395*39*39; i++)
     {
         f0_f[i] = 1.0;
     }
 
-    double *den = malloc(16395*39*39*sizeof(double));
-    double *u_para = malloc(16395*39*39*sizeof(double));
-    double *T_perp = malloc(16395*39*39*sizeof(double));
-    double *T_para = malloc(16395*39*39*sizeof(double));
+    double *den = (double*) malloc(16395*39*39*sizeof(double));
+    double *u_para = (double*) malloc(16395*39*39*sizeof(double));
+    double *T_perp = (double*) malloc(16395*39*39*sizeof(double));
+    double *T_para = (double*) malloc(16395*39*39*sizeof(double));
 
     /* Call f0_diag */
     xgc4py_f0_diag(f0_f_offset, f0_f_ndata, isp, 
                 f0_f, f0_f_shap, f0_f_ndim,  /* f0_f data (input) */
                 den, u_para, T_perp, T_para); /* (output) */
+
+    /* Checking */
+    double sum = 0.0;
+    for (int i=0; i<16395*39*39; i++)
+    {
+        sum += den[i];
+    }
+    // Expected value: 493052035.5385171
+    printf ("sum(den): %f\n", sum);
 
     Py_Finalize();
     return 0;
