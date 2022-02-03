@@ -2,7 +2,7 @@
 # distutils: language = c++
 
 import numpy as np
-import adios2 as ad2
+#import adios2 as ad2
 from tqdm import tqdm
 
 import os
@@ -10,11 +10,12 @@ import subprocess
 import logging
 
 from math import sqrt, floor, exp
-import torch
+#import torch
+import sys
 
 from libc.string cimport memcpy
 
-from XGC import XGC
+from xgc4py import XGC
 
 cimport numpy as np
 np.import_array()
@@ -30,6 +31,8 @@ cdef public void xgc4py_init(char* expdir, int timestep):
         level = logging.DEBUG,
         format = '[%(levelname)s] %(message)s')
 
+    print (sys.path)
+    print ("XGC", XGC)
     log ('xgc4py_init', expdir, timestep)
     xgcexp = XGC("d3d_coarse_v2", step=timestep)
     log (xgcexp)

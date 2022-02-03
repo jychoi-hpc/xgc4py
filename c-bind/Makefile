@@ -9,7 +9,8 @@ ADIOS2_CFLAGS=`adios2-config --cxx-flags`
 ADIOS2_LIBS=`adios2-config --cxx-libs`
 
 CFLAGS=`python3-config --cflags` ${NUMPY_INCLUDE} ${ADIOS2_CFLAGS}
-LDFLAGS=`python3-config --ldflags` -L${HOME}/anaconda3/lib -lpython3.9 -Xlinker -rpath -Xlinker ${HOME}/anaconda3/lib ${ADIOS2_LIBS}
+#LDFLAGS=`python3-config --ldflags` -L${HOME}/anaconda3/lib -lpython3.9 -Xlinker -rpath -Xlinker ${HOME}/anaconda3/lib ${ADIOS2_LIBS}
+LDFLAGS=-L/gpfs/alpine/csc143/world-shared/jyc/summit/sw/spack/opt/spack/linux-rhel8-power9le/gcc-9.1.0/gettext-0.21-7roebiyjyiv7daxurexpza3q42cczged/lib `python3-config --ldflags` -lpython3.9 ${ADIOS2_LIBS}
 
 all:
 	cython -3 $(cybridge).pyx
@@ -22,4 +23,4 @@ clean:
 	rm -rf __pycache__
 
 test:
-	PYTHONPATH=/Users/jyc/project/xgc4py:${PYTHONPATH} ./$(target)
+	PYTHONPATH=..:${PYTHONPATH} ./$(target)
