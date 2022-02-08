@@ -33,6 +33,24 @@ main()
         f0_f[i] = 1.0;
     }
 
+    double *vol = (double*) malloc(16395*39*39*sizeof(double));
+    double *vth = (double*) malloc(16395*sizeof(double));
+    double *vth2 = (double*) malloc(16395*sizeof(double));
+    double *vp = (double*) malloc(39*sizeof(double));
+    double *mu_vol = (double*) malloc(39*sizeof(double));
+    double ptl_mass, sml_e_charge;
+    double *f0_grid_vol = (double*) malloc(16395*sizeof(double));
+    double *mu_vp_vol = (double*) malloc(39*39*sizeof(double));
+
+    /* Call f0_param */
+    xgc4py_f0_param(f0_f_offset, f0_f_ndata, isp, 
+                f0_f, f0_f_shap, f0_f_ndim,  /* f0_f data (input) */
+                vol, vth, vth2, vp, mu_vol, /* (output) */
+                &ptl_mass, &sml_e_charge, /* (output) */
+                f0_grid_vol, mu_vp_vol); /* (output) */
+    printf ("xgc4py_f0_param: ptl_mass= %g\n", ptl_mass);
+    printf ("xgc4py_f0_param: sml_e_charge= %g\n", sml_e_charge);
+
     double *den = (double*) malloc(16395*39*39*sizeof(double));
     double *u_para = (double*) malloc(16395*39*39*sizeof(double));
     double *T_perp = (double*) malloc(16395*39*39*sizeof(double));
@@ -50,7 +68,7 @@ main()
         sum += den[i];
     }
     // Expected value: 493052035.5385171
-    printf ("sum(den): %f\n", sum);
+    printf ("xgc4py_f0_diag: sum(den)= %f\n", sum);
 
     Py_Finalize();
     return 0;

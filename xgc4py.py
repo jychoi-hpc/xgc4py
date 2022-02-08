@@ -738,7 +738,7 @@ class XGC:
         # (2020/12) update to use matrix-vector operations.
         # 1) Density, parallel flow, and T_perp moments
         vol_ = f0_grid_vol[:,np.newaxis,np.newaxis]*mu_vp_vol[np.newaxis,:,:]
-        return (vol_, vth, vp, mu_vol, vth2, ptl_mass, sml_e_charge, f0_grid_vol, mu_vp_vol)
+        return (vol_, vth, vp, mu_vol, vth2, ptl_mass[isp], sml_e_charge, f0_grid_vol, mu_vp_vol)
 
     def to(self, device):
         """

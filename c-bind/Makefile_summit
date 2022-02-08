@@ -12,7 +12,7 @@ CFLAGS=`python3-config --cflags` ${NUMPY_INCLUDE} ${ADIOS2_CFLAGS}
 #LDFLAGS=`python3-config --ldflags` -L${HOME}/anaconda3/lib -lpython3.9 -Xlinker -rpath -Xlinker ${HOME}/anaconda3/lib ${ADIOS2_LIBS}
 LDFLAGS=-L/gpfs/alpine/csc143/world-shared/jyc/summit/sw/spack/opt/spack/linux-rhel8-power9le/gcc-9.1.0/gettext-0.21-7roebiyjyiv7daxurexpza3q42cczged/lib `python3-config --ldflags` -lpython3.9 ${ADIOS2_LIBS}
 
-all:
+all: $(cybridge).pyx
 	cython -3 $(cybridge).pyx
 	$(CC) $(CFLAGS) -c $(target).c
 	$(CC) $(CFLAGS) -c $(cybridge).c
@@ -22,5 +22,5 @@ clean:
 	rm -f $(cybridge).{c,h,o} $(target).o $(target)
 	rm -rf __pycache__
 
-test:
+test: all
 	PYTHONPATH=..:${PYTHONPATH} ./$(target)
