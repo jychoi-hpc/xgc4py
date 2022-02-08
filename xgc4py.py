@@ -480,6 +480,9 @@ class XGC:
             y = list(map(lambda a: np.concatenate(a), zip(*alist)))
             return y
 
+    def test_print(self, x):
+        print (x)
+
     def f0_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
         """ 
         Input:
@@ -1111,6 +1114,9 @@ class XGC:
                     #     print ('fn_n0:',imu,ivp,'=>',f_nonadia_n0,ftot_n0[inode,imu,ivp],f_adia_n0)
         
         return (fn_n0, fn_turb, np.moveaxis(boltz_fac_n0,1,0), np.moveaxis(dpot_n0,1,0), np.moveaxis(v_exb_n0,1,0))
+
+def hello(x):
+    print("hello", x)
 
 if __name__ == "__main__":
     import argparse
