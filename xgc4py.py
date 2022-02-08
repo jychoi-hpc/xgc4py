@@ -337,6 +337,28 @@ class XGC:
 
         return v2d
 
+    def calc_mag_drift_flux_avg(self):
+        ## In XGC, grid%bfield shape is (n_n,4) in Fortran format
+        ## But, here we have self.grid.bfield of (n_n,4) in Python
+        #! FYI: 
+        ## bfield(:,:) !< B vector: second dimension --> 1-3 => R,Z,phi components, 4 => |B|
+
+        self.grid.v_curv_avg = self.grid.v_curv[:,0]/self.grid.bfield[:,3]**2
+        vec_tmp = self.convert_grid_2_001d(self.grid.v_curv_avg)
+        self.grid.v_curv_avg = self.convert_001d_2_grid(vec_tmp)
+        self.grid.v_curv_avg = self.grid.v_curv_avg*self.grid.bfield[:,3]**2
+        #!
+        self.grid.v_gradb_avg = self.grid.v_gradb[:,0]/self.grid.bfield[:,3]**2
+        vec_tmp = self.convert_grid_2_001d(self.grid.v_gradb_avg)
+        self.grid.v_gradb_avg = self.convert_001d_2_grid(vec_tmp)
+        self.grid.v_gradb_avg = self.grid.v_gradb_avg*self.grid.bfield[:,3]**2
+
+        eps=1E-4*self.eq_x_psi
+        for i in range(self.grid.nnodes):
+            if (self.grid.psi[i] >= 1E0-eps) or (self.grid.rgn[i]==2) or (self.grid.rgn[i]==3):
+                self.grid.v_gradb_avg[i] = 0E0
+                self.grid.v_curv_avg[i] = 0E0
+
     def __init__(self, expdir='', step=None, device=None):
         self.expdir = expdir
         
@@ -384,6 +406,9 @@ class XGC:
             print (f"==> Warning: f0_avg_diag will be incorrect.")
 
         self.epsil_psi =  1E-5
+
+        ## calc_mag_drift_flux_avg
+        self.calc_mag_drift_flux_avg()
 
         # fname = os.path.join(expdir, 'xgc.f0analysis.static.bp')
         # if os.path.exists(fname):
@@ -651,7 +676,7 @@ class XGC:
 
         # return (den, u_para, T_perp, T_para, n0, T0)
 
-    def f0_param(self, f0_inode1, ndata, isp):
+    def f0_param(self, f0_inode1, ndata, isp, f0_f):
         """ 
         Return f0 related parameters
         """
@@ -864,11 +889,21 @@ class XGC:
         over_B2=1.0/(b**2)
         D=1.0/ ( 1.0 + rho_mks * self.grid.nb_curl_nb[node] )
 
+        cmrho2=(charge/mass)*rho_mks**2
+        cmrho =(charge/mass)*rho_mks
+        murho2b=(mu_mks+charge*cmrho2*b)
+        murho2b_c=murho2b/charge
+
         grad_psi = np.zeros(2)
         grad_psi[0]=self.grid.gradpsi[node,0] #!psi_interpol(grid%x(1,node),grid%x(2,node),1,0)
         grad_psi[1]=self.grid.gradpsi[node,1] #!psi_interpol(grid%x(1,node),grid%x(2,node),0,1)
         grad_psi_sqr=sum(grad_psi[:]**2)
         over_abs_grad_psi=1.0/sqrt(grad_psi_sqr)
+
+        # The magnetic drifts (curvature + grad_b)
+        v_mag = np.zeros(3, dtype=np.float64)
+        v_mag[0] = D * ( (grid%v_gradb(1,node)-grid%v_gradb_avg(node))*murho2b_c*over_B2
+                  +(grid%v_curv(1,node)-grid%v_curv_avg(node))*cmrho2 )
 
         if isp >= 1:
             #! Ions
