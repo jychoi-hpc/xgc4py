@@ -12,7 +12,60 @@ except ImportError:
     import warnings
     warnings.warn("No torch module. Disabled.")
 
+import multiprocessing as mp    
+import socket
+import re
+
+def parse_omp_places(envstr):
+    """
+    Parse OMP_PLACES env string to get list of places
+    Usage example:
+        parse_omp_places(os.environ["OMP_PLACES"])
+    Input examples:
+        "{0:4},{4:4},{8:4},{12:4},{16:4},{20:4},{24:4}"
+    """
+    plist = list()
+    for block in re.findall(r"({[\d,:]+})", envstr):
+        start, cnt = list(map(int, re.findall(r"\d+", block)))
+        for i in range(start, start + cnt):
+            plist.append(i)
+    return plist
+    
 class XGC:
+    
+    @staticmethod
+    def worker_init(counter):
+        with counter.get_lock():
+            counter.value += 1
+            # pidmap[os.getpid()] = (args.nworkers+1)*rank + counter.value
+        affinity = None
+        if hasattr(os, "sched_getaffinity"):
+            affinity_check = os.getenv("XGC4PY_AFFINITY")
+            if affinity_check == "OMP":
+                affinity = parse_omp_places(os.getenv("OMP_PLACES"))
+            else:
+                affinity = list(os.sched_getaffinity(0))
+
+            core_per_thread = 4
+            offset = 4
+            affinity_mask = set(
+                affinity[
+                    core_per_thread * counter.value
+                    + offset : core_per_thread * counter.value
+                    + offset
+                    + core_per_thread
+                ]
+            )
+            print (counter.value, 'affinity_mask', affinity_mask)
+            os.sched_setaffinity(0, affinity_mask)
+            affinity = os.sched_getaffinity(0)
+
+        hostname = socket.gethostname()
+        print (
+            f"Worker: pid={os.getpid()} hostname={hostname} ID={counter.value} affinity={affinity}"
+        )
+        return 0
+    
     class Mesh:
         def __init__(self, expdir=''):
             fname = os.path.join(expdir, 'xgc.mesh.bp')
@@ -104,7 +157,7 @@ class XGC:
             self.f0_grid_vol = self.f0_grid_vol_vonly[isp,:]
 
             _x, _y = np.meshgrid(self.mu_vol, self.vp_vol)
-            self.mu_vp_vol = _x*_y
+            self.mu_vp_vol = _x.T *_y.T
 
     class Grid:
         class Mat:
@@ -491,7 +544,7 @@ class XGC:
     def f0_diag_future(self, f0_inode1, ndata, isp, f0_f, progress=False, nchunk=256, max_workers=16):
         from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with ProcessPoolExecutor(max_workers=max_workers, initializer=self.worker_init, initargs=(mp.Value("i", 0),)) as executor:
             futures = list()
             for i in range(0, ndata, nchunk):
                 n = nchunk if i+nchunk < ndata else ndata-i
@@ -499,7 +552,7 @@ class XGC:
                 futures.append(f)
             
             alist = list()
-            for f in tqdm(futures, disable=not progress):
+            for f in tqdm(futures, disable=not progress, desc='f0_diag'):
                 alist.append(f.result())
 
             y = list(map(lambda a: np.concatenate(a), zip(*alist)))
@@ -876,6 +929,8 @@ class XGC:
         Output:
         exb
         """
+        assert (len(self.psn.E_rho_ff)>0), "No E_rho_ff/pot_rho_ff/pot0 data in xgc.f0. Check if XGC_F_COUPLING enabled."
+        
         v_mag,v_exb,v_pardrift,pot_rho,grad_psi_sqr = None,None,None,None,None
         E = np.zeros(3)
         wrho = np.zeros(2)
@@ -902,8 +957,8 @@ class XGC:
 
         # The magnetic drifts (curvature + grad_b)
         v_mag = np.zeros(3, dtype=np.float64)
-        v_mag[0] = D * ( (grid%v_gradb(1,node)-grid%v_gradb_avg(node))*murho2b_c*over_B2
-                  +(grid%v_curv(1,node)-grid%v_curv_avg(node))*cmrho2 )
+        v_mag[0] = D * ( (self.grid.v_gradb[node,1]-self.grid.v_gradb_avg[node])*murho2b_c*over_B2
+                  +(self.grid.v_curv[node,1]-self.grid.v_curv_avg[node])*cmrho2 )
 
         if isp >= 1:
             #! Ions
@@ -917,7 +972,7 @@ class XGC:
             #          +wrho(2)*0.5D0*(psn%pot_rho_ff(0,irho+1,node)+psn%pot_rho_ff(1,irho+1,node))
             # E   = E   + wrho(1)*0.5D0*(psn%E_rho_ff(:,0,irho  ,node)+psn%E_rho_ff(:,1,irho  ,node))
             # E   = E   + wrho(2)*0.5D0*(psn%E_rho_ff(:,0,irho+1,node)+psn%E_rho_ff(:,1,irho+1,node))
-
+            
             pot_rho = wrho[0]*0.5*(self.psn.pot_rho_ff[iphi,node,irho  ,0]+self.psn.pot_rho_ff[iphi,node,irho  ,1])  \
                     + wrho[1]*0.5*(self.psn.pot_rho_ff[iphi,node,irho+1,0]+self.psn.pot_rho_ff[iphi,node,irho+1,1])
             E   = E   + wrho[0]*0.5*(self.psn.E_rho_ff[iphi,node,irho  ,0,:]+self.psn.E_rho_ff[iphi,node,irho  ,1,:])
@@ -991,7 +1046,7 @@ class XGC:
     def f0_non_adiabatic_future(self, iphi, f0_inode1, ndata, isp, f0_f, n0_avg, T0_avg, progress=False, nchunk=256, max_workers=16):
         from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with ProcessPoolExecutor(max_workers=max_workers, initializer=self.worker_init, initargs=(mp.Value("i", 0),)) as executor:
             futures = list()
             for i in range(0, ndata, nchunk):
                 n = nchunk if i+nchunk < ndata else ndata-i
@@ -999,7 +1054,7 @@ class XGC:
                 futures.append(f)
             
             alist = list()
-            for f in tqdm(futures, disable=not progress):
+            for f in tqdm(futures, disable=not progress, desc='f0_non_adiabatic'):
                 alist.append(f.result())
 
             y = list(map(lambda a: np.concatenate(a), zip(*alist)))
@@ -1082,7 +1137,7 @@ class XGC:
         vth = 0.0
         csign = ptl_charge[isp]/sml_e_charge
         for _iphi in range(self.nphi):
-            for inode in tqdm(range(0, ndata), disable=not progress):
+            for inode in tqdm(range(0, ndata), disable=not progress, desc='DIAG_3D_F_CALC3'):
                 for imu in range(0, f0_nmu+1):
                     v_mag,v_exb,v_pardrift,pot_rho,grad_psi_sqr = self.get_drift_velocity(_iphi,f0_inode1+inode,mu[imu],vp,isp,vth)
                     _v_exb_n0[_iphi,imu,inode,:] = v_exb[:]
@@ -1106,7 +1161,7 @@ class XGC:
         ndiag_en=4
         en_max = 1.0/sqrt(f0_smu_max**2+f0_vp_max**2)
         csign = ptl_charge[isp]/sml_e_charge
-        for inode in tqdm(range(0, ndata), disable=not progress):
+        for inode in tqdm(range(0, ndata), disable=not progress, desc='DIAG_3D_F_CALC4'):
             if (self.grid.psi[f0_inode1+inode] > self.sml_outpsi or self.grid.psi[f0_inode1+inode] < self.sml_inpsi or (self.grid.rgn[f0_inode1+inode]==3 and self.sml_exclude_private) ):
                 # print ('skip:', f0_inode1+inode, self.grid.psi[f0_inode1+inode], self.sml_outpsi, self.sml_inpsi, self.grid.rgn[f0_inode1+inode], self.sml_exclude_private)
                 continue
@@ -1155,16 +1210,23 @@ def hello(x):
 
 if __name__ == "__main__":
     import argparse
-    import torch
+    try:
+        import torch
+    except ImportError:
+        import warnings
+        warnings.warn("No torch module. Disabled.")
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--expdir', help='exp directory (default: %(default)s)', default='')
     parser.add_argument('--timestep', help='timestep', type=int, default=0)
     parser.add_argument('--ndata', help='ndata', type=int)
+    parser.add_argument('--nworkers', help='nworkers', type=int, default=8)
     args = parser.parse_args()
     
     xgcexp = XGC(args.expdir, step=args.timestep)
 
     fname = os.path.join(args.expdir, 'restart_dir/xgc.f0.%05d.bp'%args.timestep)
+    print ("Reading:", fname)
     with ad2.open(fname, 'r') as f:
         i_f = f.read('i_f')
     
@@ -1172,7 +1234,11 @@ if __name__ == "__main__":
     iphi = 0
     f0_inode1 = 0
     ndata = i_f.shape[2] if args.ndata is None else args.ndata
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    try:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    except:
+        device = None
     print ("device:", device)
 
     fn0_all = np.zeros([nphi,ndata])
@@ -1181,7 +1247,7 @@ if __name__ == "__main__":
         f0_f = np.moveaxis(i_f[iphi,:],1,0)
         f0_f = f0_f[f0_inode1:f0_inode1+ndata,:,:]
         den, upara, Tperp, Tpara, fn0, fT0 = \
-            xgcexp.f0_diag_future(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, progress=True)
+            xgcexp.f0_diag_future(f0_inode1=f0_inode1, ndata=ndata, isp=1, f0_f=f0_f, progress=True, max_workers=args.nworkers)
         fn0_all[iphi,:] = fn0
         fT0_all[iphi,:] = fT0
     print (den.shape, upara.shape, Tperp.shape, Tpara.shape, fn0.shape, fT0.shape)
@@ -1195,7 +1261,7 @@ if __name__ == "__main__":
     for iphi in range(nphi):
         fn_n0, fn_turb, _, _, _ = \
             xgcexp.f0_non_adiabatic_future(iphi=iphi, f0_inode1=f0_inode1, ndata=ndata, isp=1, \
-                f0_f=f0_f_all, n0_avg=fn0_avg, T0_avg=fT0_avg, progress=True)
+                f0_f=f0_f_all, n0_avg=fn0_avg, T0_avg=fT0_avg, progress=True, max_workers=args.nworkers)
         fn_n0_all[iphi,:] = fn_n0
         fn_turb_all[iphi,:] = fn_turb
     print (fn_n0_all.shape, fn_turb_all.shape)
