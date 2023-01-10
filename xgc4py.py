@@ -30,7 +30,26 @@ def parse_omp_places(envstr):
         for i in range(start, start + cnt):
             plist.append(i)
     return plist
+
+## https://github.com/rmchurch/python_xgc
+def create_sparse_xgc(nelement,eindex,value,m=None,n=None):
+    """Create Python sparse matrix from XGC data"""
+    from scipy.sparse import csr_matrix
     
+    if m is None: m = nelement.size
+    if n is None: n = nelement.size
+    
+    #format for Python sparse matrix
+    indptr = np.insert(np.cumsum(nelement),0,0)
+    indices = np.empty((indptr[-1],))
+    data = np.empty((indptr[-1],))
+    for i in range(nelement.size):
+            indices[indptr[i]:indptr[i+1]] = eindex[i,0:nelement[i]]
+            data[indptr[i]:indptr[i+1]] = value[i,0:nelement[i]]
+    #create sparse matrices
+    spmat = csr_matrix((data,indices,indptr),shape=(m,n))
+    return spmat
+
 class XGC:
     
     @staticmethod
@@ -128,7 +147,7 @@ class XGC:
             self.ptl_e_mass_au=2E-2
             self.ptl_mass_au=2E0
             self.sml_prot_mass=1.6720E-27 ## proton mass (MKS)
-            self.ptl_mass = [self.ptl_e_mass_au*self.sml_prot_mass, self.ptl_mass_au*self.sml_prot_mass]
+            self.ptl_mass = np.array([self.ptl_e_mass_au*self.sml_prot_mass, self.ptl_mass_au*self.sml_prot_mass])
 
             self.ptl_charge_eu=1.0  #! charge number
             self.ptl_e_charge_eu=-1.0
@@ -144,17 +163,21 @@ class XGC:
             self.vp_vol[0] = 0.5
             self.vp_vol[-1] = 0.5
 
+            ## https://github.com/rmchurch/python_xgc
+            self.volfac = np.ones((self.f0_nmu+1,self.f0_nvp*2+1))
+            self.volfac[0,:]=0.5 #0.5 for where ivpe==0
+
             #f0_smu_max = 3.0
             #f0_dsmu = f0_smu_max/f0_nmu
             self.mu = (np.arange(self.f0_nmu+1, dtype=np.float64)*self.f0_dsmu)**2
             self.vp = np.arange(-self.f0_nvp, self.f0_nvp+1, dtype=np.float64)*self.f0_dvp
 
             ## pre-calculation for f0_diag
-            isp = 1
-            self.en_th = self.f0_T_ev[isp,:]*self.sml_ev2j
-            self.vth2 = self.en_th/self.ptl_mass[isp]
+            ## depending on isp
+            self.en_th = self.f0_T_ev[:,:]*self.sml_ev2j
+            self.vth2 = self.en_th[:,:]/self.ptl_mass[:,np.newaxis]
             self.vth = np.sqrt(self.vth2)
-            self.f0_grid_vol = self.f0_grid_vol_vonly[isp,:]
+            # self.f0_grid_vol = self.f0_grid_vol_vonly[:,:]
 
             _x, _y = np.meshgrid(self.mu_vol, self.vp_vol)
             self.mu_vp_vol = _x.T *_y.T
@@ -225,11 +248,24 @@ class XGC:
             print (f"Reading: {fname}")
             with ad2.open(fname, 'r') as f:
                 self.basis = f.read('basis')
+                self.nelement_r =  f.read('nelement_r')
+                self.eindex_r =  f.read('eindex_r')-1
+                self.value_r =  f.read('value_r')
+                self.nelement_z =  f.read('nelement_z')
+                self.eindex_z =  f.read('eindex_z')-1
+                self.value_z =  f.read('value_z')
+            self.gradr = create_sparse_xgc(self.nelement_r,self.eindex_r,self.value_r)
+            self.gradz = create_sparse_xgc(self.nelement_z,self.eindex_z,self.value_z)
 
             fname = os.path.join(expdir, 'xgc.bfield.bp')
             print (f"Reading: {fname}")
             with ad2.open(fname, 'r') as f:
                 self.bfield = f.read('/node_data[0]/values')
+            ## https://github.com/rmchurch/python_xgc
+            self.Bpol = np.sqrt(np.sum(self.bfield[:,:2]**2.,axis=1))
+            self.B = np.sqrt(np.sum(self.bfield[:,:3]**2.,axis=1))
+            self.BP = self.bfield[:,2]
+
             x = self.bfield
             y = np.sqrt(np.sum(x**2, axis=1))
             self.bfield = np.concatenate((x,y[:,np.newaxis]), axis=1)
@@ -237,10 +273,22 @@ class XGC:
             fname = os.path.join(expdir, 'xgc.f0.mesh.bp')
             print (f"Reading: {fname}")
             with ad2.open(fname, 'r') as f:
+                self.gradpsi = f.read('gradpsi')
                 self.v_gradb = f.read('v_gradb')
                 self.v_curv = f.read('v_curv')
                 self.nb_curl_nb = f.read('nb_curl_nb')
                 self.gradpsi = f.read('gradpsi')
+
+            ## https://github.com/rmchurch/python_xgc
+            absgradpsi = np.sqrt(np.sum(self.gradpsi**2.,axis=1))
+            #the radial components do not have gradpsi normalized out, normalize here
+            self.v_gradb_norm = self.v_gradb
+            self.v_curv_norm = self.v_curv
+            self.v_gradb_norm[:,0] = self.v_gradb[:,0]/absgradpsi
+            self.v_curv_norm[:,0] = self.v_curv[:,0]/absgradpsi
+            self.curl_nb = self.v_curv/self.B[:,np.newaxis] + self.v_gradb/self.B[:,np.newaxis]**2.
+            self.nb_cross_gradBoverB = self.v_gradb_norm/self.B[:,np.newaxis]**2.
+            print ("self.nb_cross_gradBoverB", self.nb_cross_gradBoverB.shape)
 
             fname = os.path.join(expdir, 'xgc.f0analysis.static.bp')
             if os.path.exists(fname):
@@ -601,12 +649,12 @@ class XGC:
         nnodes = self.mesh.nnodes
         mu_vol = self.f0mesh.mu_vol
         vp_vol = self.f0mesh.vp_vol
-        f0_grid_vol = self.f0mesh.f0_grid_vol[f0_inode1:f0_inode1+ndata]
         mu_vp_vol = self.f0mesh.mu_vp_vol
         mu = self.f0mesh.mu
         vp = self.f0mesh.vp
-        vth = self.f0mesh.vth[f0_inode1:f0_inode1+ndata]
-        vth2 = self.f0mesh.vth2[f0_inode1:f0_inode1+ndata]
+        vth = self.f0mesh.vth[isp, f0_inode1:f0_inode1+ndata]
+        vth2 = self.f0mesh.vth2[isp, f0_inode1:f0_inode1+ndata]
+        f0_grid_vol = self.f0mesh.f0_grid_vol_vonly[isp, f0_inode1:f0_inode1+ndata]
 
         ## Check
         if f0_f.ndim == 2:
@@ -729,6 +777,79 @@ class XGC:
 
         # return (den, u_para, T_perp, T_para, n0, T0)
 
+    def f0_off_diag(self, f0_inode1, ndata, isp, f0_f, progress=False):
+        ## Aliases
+        f0_nmu = self.f0mesh.f0_nmu
+        f0_nvp = self.f0mesh.f0_nvp
+        f0_smu_max = self.f0mesh.f0_smu_max
+        f0_dsmu = self.f0mesh.f0_dsmu
+        f0_T_ev = self.f0mesh.f0_T_ev
+        f0_grid_vol_vonly = self.f0mesh.f0_grid_vol_vonly
+        f0_dvp = self.f0mesh.f0_dvp    
+        nnodes = self.mesh.nnodes
+        mu_vol = self.f0mesh.mu_vol
+        vp_vol = self.f0mesh.vp_vol
+        mu_vp_vol = self.f0mesh.mu_vp_vol
+        mu = self.f0mesh.mu
+        vp = self.f0mesh.vp
+        vth = self.f0mesh.vth[isp, f0_inode1:f0_inode1+ndata]
+        vth2 = self.f0mesh.vth2[isp, f0_inode1:f0_inode1+ndata]
+        f0_grid_vol = self.f0mesh.f0_grid_vol_vonly[isp, f0_inode1:f0_inode1+ndata]
+
+        ## Check
+        if f0_f.ndim == 2:
+            f0_f = f0_f[np.newaxis,:]
+        #print (f0_f.shape, (ndata, f0_nmu+1, f0_nvp*2+1))
+        assert(f0_f.shape[0] == ndata)
+        assert(f0_f.shape[1] == f0_nmu+1)
+        assert(f0_f.shape[2] >= f0_nvp*2+1)
+
+        sml_e_charge=1.6022E-19  ## electron charge (MKS)
+        sml_ev2j=sml_e_charge
+
+        ptl_e_mass_au=2E-2
+        ptl_mass_au=2E0
+        sml_prot_mass=1.6720E-27 ## proton mass (MKS)
+        ptl_mass = [ptl_e_mass_au*sml_prot_mass, ptl_mass_au*sml_prot_mass]
+
+        ptl_charge_eu=1.0  #! charge number
+        ptl_e_charge_eu=-1.0
+        ptl_charge = [ptl_e_charge_eu*sml_e_charge, ptl_charge_eu*sml_e_charge]
+
+        ##m/qB*curl(b) terms
+        # mi,chargei,vspace_voli,volfaci,vthi = loader.moments_params(1)
+        # vspace_vol = self.f0_grid_vol_vonly[isp,:]        
+        # volfac = np.ones((self.vpe.size,self.vpa.size))
+        # volfac[0,:]=0.5 #0.5 for where ivpe==0
+
+        # mVpaCubi = mi*vthi**3.*np.einsum('k,ijk,ik->j',loader.vpa**3.,i_f,volfaci)*vspace_voli
+        # term7_vpar3[:,1] = mi/chargei/B*(curl_nb[:,0]*gradr.dot(mVpaCubi) + curl_nb[:,1]*gradz.dot(mVpaCubi))
+
+        vspace_voli = f0_grid_vol
+        volfaci = self.f0mesh.volfac
+        loader_vpa = np.linspace(-self.f0mesh.f0_vp_max,self.f0mesh.f0_vp_max,2*self.f0mesh.f0_nvp+1) ## vp [-n,+n]
+        loader_vpe = np.linspace(0,self.f0mesh.f0_smu_max,self.f0mesh.f0_nmu+1) ## mu [0,+n]
+        vthi = vth
+        mi = ptl_mass[isp]
+        chargei = ptl_charge[isp]
+        i_f = f0_f
+        mVpaCubi = mi*vthi**3.*np.einsum('k,ijk,jk->i',loader_vpa**3.,i_f,volfaci)*vspace_voli
+        curl_nb = self.grid.curl_nb[f0_inode1:f0_inode1+ndata,:]
+        nb_cross_gradBoverB = self.grid.nb_cross_gradBoverB[f0_inode1:f0_inode1+ndata,:]
+
+        B = self.grid.B[f0_inode1:f0_inode1+ndata]
+        gradr = self.grid.gradr[f0_inode1:f0_inode1+ndata, f0_inode1:f0_inode1+ndata]
+        gradz = self.grid.gradz[f0_inode1:f0_inode1+ndata, f0_inode1:f0_inode1+ndata]
+        vpar3 = mi/chargei/B*(curl_nb[:,0]*gradr.dot(mVpaCubi) + curl_nb[:,1]*gradz.dot(mVpaCubi))
+
+        ##m/qB nb_cross_gradBoverB
+        # mVpaVpe2i = mi*vthi**3.*np.einsum('k,i,ijk,ik->j',loader.vpa,loader.vpe**2.,i_f,volfaci)*vspace_voli
+        # term11_vpavpe2[:,1] = mi/chargei/B*(nb_cross_gradBoverB[:,0]*gradr.dot(0.5*mVpaVpe2i) + nb_cross_gradBoverB[:,1]*gradz.dot(0.5*mVpaVpe2i))
+        mVpaVpe2i = mi*vthi**3.*np.einsum('k,j,ijk,jk->i',loader_vpa,loader_vpe**2.,i_f,volfaci)*vspace_voli
+        vpavpe2 = mi/chargei/B*(nb_cross_gradBoverB[:,0]*gradr.dot(0.5*mVpaVpe2i) + nb_cross_gradBoverB[:,1]*gradz.dot(0.5*mVpaVpe2i))
+
+        return (vpar3, vpavpe2)
+
     def f0_param(self, f0_inode1, ndata, isp, f0_f):
         """ 
         Return f0 related parameters
@@ -745,7 +866,7 @@ class XGC:
         nnodes = self.mesh.nnodes
         mu_vol = self.f0mesh.mu_vol
         vp_vol = self.f0mesh.vp_vol
-        f0_grid_vol = self.f0mesh.f0_grid_vol[f0_inode1:f0_inode1+ndata]
+        f0_grid_vol = self.f0mesh.f0_grid_vol_vonly[isp, f0_inode1:f0_inode1+ndata]
         mu_vp_vol = self.f0mesh.mu_vp_vol
         mu = self.f0mesh.mu
         vp = self.f0mesh.vp
